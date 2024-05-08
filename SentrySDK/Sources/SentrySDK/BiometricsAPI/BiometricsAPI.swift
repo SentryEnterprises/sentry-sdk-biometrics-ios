@@ -70,36 +70,36 @@ final class BiometricsAPI {
         }
         
         debugOutput += "     Selecting Enroll Applet\n"
-        try await sendAndConfirm(apduCommand: APDUCommands.selectCommand, to: tag)
+        try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
 
         debugOutput += "     Verifing PIN\n"
-        let returnData = try await send(apduCommand: APDUCommands.verifyPINCommand(pin: pin), to: tag)
+        let returnData = try await send(apduCommand: APDUCommand.verifyPIN(pin: pin), name: "Verify PIN", to: tag)
         
-        if returnData.statusWord == APDUResponseCodes.conditionOfUseNotSatisfied.rawValue {
+        if returnData.statusWord == APDUResponseCode.conditionOfUseNotSatisfied.rawValue {
             debugOutput += "     PIN not set, setting\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.setPINCommand(pin: pin), to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.setPIN(pin: pin), name: "Set PIN", to: tag)
 
             debugOutput += "     Sending PT1 command\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.setPT1Command, to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.setPT1, name: "PT1", to: tag)
 
             debugOutput += "     Setting enrollment\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.setEnrollCommand, to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.setEnroll, name: "Enrollment", to: tag)
 
             debugOutput += "     Setting enrollment limit\n"
-            try await send(apduCommand: APDUCommands.setLimitCommand, to: tag)
+            try await send(apduCommand: APDUCommand.setEnrollLimit, name: "Enrollment Limit", to: tag)
 
             debugOutput += "     Storing\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.setStoreCommand, to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.setStore, name: "Storing", to: tag)
             
             // after setting the PIN, make sure the enrollment app is selected
             debugOutput += "     Selecting Enroll applet again\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.selectCommand, to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
             
             // verify the PIN again
             debugOutput += "     Reverifying PIN\n"
-            try await sendAndConfirm(apduCommand: APDUCommands.verifyPINCommand(pin: pin), to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.verifyPIN(pin: pin), name: "Verify PIN", to: tag)
         } else {
-            if returnData.statusWord != APDUResponseCodes.operationSuccessful.rawValue {
+            if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
                 throw SentrySDKError.apduCommandError(returnData.statusWord)
             }
         }
@@ -127,7 +127,7 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        let returnData = try await send(apduCommand: APDUCommands.getEnrollStatusCommand, to: tag)
+        let returnData = try await send(apduCommand: APDUCommand.getEnrollStatus, name: "Get Enrollment Status", to: tag)
                 
         // get the data as an array of bytes
         let dataArray = returnData.data.toArrayOfBytes()
@@ -176,14 +176,14 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
 
-        let returnData = try await send(apduCommand: APDUCommands.getBiometricVerifyCommand, to: tag)
+        let returnData = try await send(apduCommand: APDUCommand.getFingerprintVerify, name: "Fingerprint Verification", to: tag)
         
-        if returnData.statusWord == APDUResponseCodes.operationSuccessful.rawValue {
+        if returnData.statusWord == APDUResponseCode.operationSuccessful.rawValue {
             debugOutput += "     Match\n------------------------------\n"
             return true
         }
         
-        if returnData.statusWord == APDUResponseCodes.noMatchFound.rawValue {
+        if returnData.statusWord == APDUResponseCode.noMatchFound.rawValue {
             debugOutput += "     No match found\n------------------------------\n"
             return false
         }
@@ -210,7 +210,7 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
 
-        try await sendAndConfirm(apduCommand: APDUCommands.processFingerprintCommand, to: tag)
+        try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint, name: "Process Fingerprint", to: tag)
         
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
@@ -236,7 +236,7 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        try await sendAndConfirm(apduCommand: APDUCommands.verifyCommand, to: tag)
+        try await sendAndConfirm(apduCommand: APDUCommand.verifyFingerprintEnrollment, name: "Verify Fingerprint", to: tag)
         
         debugOutput += "------------------------------\n"
     }
@@ -245,10 +245,10 @@ final class BiometricsAPI {
     // MARK: - Private Methods
     
     /// Sends an APDU command, throwing an exception if that command does not respond with a successful operation value.
-    @discardableResult private func sendAndConfirm(apduCommand: [UInt8], to tag: NFCISO7816Tag) async throws -> APDUReturnResult {
-        let returnData = try await send(apduCommand: apduCommand, to: tag)
+    @discardableResult private func sendAndConfirm(apduCommand: [UInt8], name: String? = nil, to tag: NFCISO7816Tag) async throws -> APDUReturnResult {
+        let returnData = try await send(apduCommand: apduCommand, name: name, to: tag)
         
-        if returnData.statusWord != APDUResponseCodes.operationSuccessful.rawValue {
+        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
             throw SentrySDKError.apduCommandError(returnData.statusWord)
         }
 
@@ -256,8 +256,8 @@ final class BiometricsAPI {
     }
     
     /// Sends an APDU command.
-    @discardableResult private func send(apduCommand: [UInt8], to tag: NFCISO7816Tag) async throws -> APDUReturnResult {
-        var debugOutput = "\n---------- Sending -----------\n"
+    @discardableResult private func send(apduCommand: [UInt8], name: String? = nil, to tag: NFCISO7816Tag) async throws -> APDUReturnResult {
+        var debugOutput = "\n---------- Sending \(name ?? "") -----------\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
@@ -276,8 +276,6 @@ final class BiometricsAPI {
         debugOutput += "     <<< Received <= \(resultData.toHex())\n"
         
         let statusWord: Int = Int(result.1) << 8 + Int(result.2)
-        
-        debugOutput += "     StatusWord: \(statusWord)\n\n"
         return APDUReturnResult(data: result.0, statusWord: statusWord)
     }
 }
