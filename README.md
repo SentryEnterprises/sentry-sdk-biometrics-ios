@@ -31,16 +31,6 @@ This is meant for use with the Java Card technology from Sentry Enterprises. As 
 
 ## Guide
 
-Note about
-PIN length, digit range
-5 second timeout waiting for fingerprints that cannot be set
-verbose debug output
-NFC reader entitlements (in app and in bundle id)
-* NFC Privacy plist entry
-Enroll applet AID in plist
-
-requires an java card with an ISO7816 compliant NFC tag
-
 ###  IMPORTANT - ABOUT THE PIN
 While users are never meant to see or enter a PIN, the IDEX Enroll applet requires a PIN verification before it processes some commands. This PIN is usually set during initialization of the Java Card itself, and can vary depending on how the card is initialized. This usually happens through a script that is run using JCShell. 
 
