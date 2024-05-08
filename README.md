@@ -39,8 +39,6 @@ The PIN is required internally by the SentrySDK and is set in the constructor. T
 If no PIN is set, this library sets the PIN to the value provided to the SentrySDK in its constructor. The PIN MUST be 4-6 characters in length. Less than four (4) characters causes the app to throw an error. Any characters after the 6th are ignored.
 
 
-
-
 ## Preparation
 1. Add NFC Tag Reading to your App ID.
 
@@ -55,8 +53,6 @@ If no PIN is set, this library sets the PIN to the value provided to the SentryS
 ![image](https://github.com/SentryEnterprises/SentrySDK/assets/166414810/9e840352-1fad-4903-a90a-7cb1d52344f7)
 
 
-
-
 ## Basic Usage
 
 1. Import the SentrySDK into your unit.
@@ -64,31 +60,18 @@ If no PIN is set, this library sets the PIN to the value provided to the SentryS
 import SentrySDK
 ```
 
-2. Add ObservedObject before ```body``` or any ```some View```.
-
-### Read
+2. Instantiate the ```SentrySDK``` using the PIN set on the card.
 ```swift
-@ObservedObject var NFCR = NFCReader()
+let sentrySDK = SentrySDK(pin: [1, 2, 3, 4])
 ```
 
-### Write
+3. Call the desire function.
 ```swift
-@ObservedObject var NFCW = NFCWriter()
-```
-
-### Functions
-```swift
-func read() {
-    NFCR.read()
-}
-func write() {
-    NFCW.msg = NFCR.msg
-    NFCW.write()
-}
+let status = try await sentrySDK.getEnrollmentStatus()
 ```
 
 ## Demo
-Path: `./Demo` (Xcode Project in SwiftUI)
+[See the SentryBiometricEnrollAndVerify repository](https://github.com/SentryEnterprises/SentryBiometricEnrollAndVerify)
 
 ## License
 MIT
