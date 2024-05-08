@@ -52,6 +52,10 @@ If no PIN is set, this library sets the PIN to the value provided to the SentryS
 4. Add NFC Privacy under ```Custom iOS Target Properties``` (i.e. the ```Info``` tab on the target settings).
 ![image](https://github.com/SentryEnterprises/SentrySDK/assets/166414810/9e840352-1fad-4903-a90a-7cb1d52344f7)
 
+5. Add ```ISO7816 application identifiers for NFC Tag Reader Session``` to the application's ```Information Property List``` and add one item to this array with the following value: 494445585F4C5F0101
+![image](https://github.com/SentryEnterprises/SentrySDK/assets/166414810/1b107821-3df1-4cba-8db6-57f145fed9ba)
+
+
 
 ## Basic Usage
 
