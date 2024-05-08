@@ -15,6 +15,7 @@ import CoreNFC
  */
 public class SentrySDK: NSObject {
     // MARK: - Private Properties
+    private let cardCommunicationError = "An error occurred while communicating with the card."
     private let enrollPinCode: [UInt8]
     private let biometricsAPI: BiometricsAPI
 
@@ -60,20 +61,30 @@ public class SentrySDK: NSObject {
     public func getEnrollmentStatus() async throws -> BiometricEnrollmentStatus  {
         print("=== GET ENROLLMENT STATUS")
         
+        var errorDuringSession = false
         defer {
             // closes the NFC reader session
-            session?.invalidate()
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
         }
 
-        // establish a connection
-        let isoTag = try await establishConnection()
-        
-        // initialize the Enroll applet
-        try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
-        
-        // get and return the enrollment status
-        let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
-        return enrollStatus
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Enroll applet
+            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            
+            // get and return the enrollment status
+            let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
+            return enrollStatus
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
     }
     
     /**
@@ -97,20 +108,30 @@ public class SentrySDK: NSObject {
     public func validateFingerprint() async throws -> Bool {
         print("=== VALIDATE FINGERPRINT")
         
+        var errorDuringSession = false
         defer {
             // closes the NFC reader session
-            session?.invalidate()
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
         }
         
-        // establish a connection
-        let isoTag = try await establishConnection()
-        
-        // initialize the Enroll applet
-        try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
-        
-        // perform a biometric fingerprint verification
-        let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
-        return result
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Enroll applet
+            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            
+            // perform a biometric fingerprint verification
+            let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
+            return result
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
     }
     
     /**
@@ -140,61 +161,67 @@ public class SentrySDK: NSObject {
     public func enrollFingerprint(connected: (Bool) -> Void, stepFinished: (_ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws  {
         print("=== ENROLL BIOMETRIC")
         
+        var errorDuringSession = false
         defer {
             // closes the NFC reader session
-            session?.invalidate()
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
         }
-
-        // establish a connection
-        let isoTag: NFCISO7816Tag
+        
         do {
+            // establish a connection
+            let isoTag: NFCISO7816Tag
             isoTag = try await establishConnection()
             connected(true)
+            
+            // initialize the Enroll applet
+            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            
+            // get the current enrollment status
+            let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
+            
+            // calculate the required number of steps and update the NFC reader session UI
+            let maximumSteps = enrollStatus.enrolledTouches + enrollStatus.remainingTouches
+            var progress = updateProgress(oldProgress: 0, newProgress: 0)
+            var enrollmentsLeft = maximumSteps
+            
+            // print("=== ENROLL BIOMETRIC - \n     MaxSteps: \(maximumSteps)\n     Progress: \(progress)\n     Remaining: \(enrollmentsLeft)")
+            
+            while enrollmentsLeft > 0 {
+                //print("=== ENROLL BIOMETRIC - Enrolling, Remaining: \(enrollmentsLeft)")
+                
+                // scan the finger currently on the sensor
+                let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
+                if remainingEnrollments <= 0 {
+                    try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                }
+                enrollmentsLeft = remainingEnrollments
+                
+                // print("=== ENROLL BIOMETRIC - \n     Remaining: \(enrollmentsLeft)")
+                
+                // update the NFC session UI with the current progress percentage
+                let currentStep = maximumSteps - enrollmentsLeft
+                let currentStepDouble = Double(currentStep)
+                let maximumStepsDouble = Double(maximumSteps)
+                progress = updateProgress(oldProgress: progress, newProgress: UInt8(currentStepDouble / maximumStepsDouble * 100))
+                
+                // print("=== ENROLL BIOMETRIC - \n     Progress: \(progress)")
+                
+                // inform the caller of the step that just finished
+                stepFinished(currentStep, maximumSteps)
+                
+                // print("=== ENROLL BIOMETRIC - \n     CurrentStep: \(currentStep)")
+            }
+            
+            //print("=== ENROLL BIOMETRIC - Enrollment Complete")
         } catch (let error) {
+            errorDuringSession = true
             connected(false)
             throw error
         }
-        
-        // initialize the Enroll applet
-        try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
-        
-        // get the current enrollment status
-        let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
-        
-        // calculate the required number of steps and update the NFC reader session UI
-        let maximumSteps = enrollStatus.enrolledTouches + enrollStatus.remainingTouches
-        var progress = updateProgress(oldProgress: 0, newProgress: 0)
-        var enrollmentsLeft = maximumSteps
-        
-        // print("=== ENROLL BIOMETRIC - \n     MaxSteps: \(maximumSteps)\n     Progress: \(progress)\n     Remaining: \(enrollmentsLeft)")
-        
-        while enrollmentsLeft > 0 {
-            //print("=== ENROLL BIOMETRIC - Enrolling, Remaining: \(enrollmentsLeft)")
-            
-            // scan the finger currently on the sensor
-            let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
-            if remainingEnrollments <= 0 {
-                try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
-            }
-            enrollmentsLeft = remainingEnrollments
-            
-           // print("=== ENROLL BIOMETRIC - \n     Remaining: \(enrollmentsLeft)")
-            
-            // update the NFC session UI with the current progress percentage
-            let currentStep = maximumSteps - enrollmentsLeft
-            let currentStepDouble = Double(currentStep)
-            let maximumStepsDouble = Double(maximumSteps)
-            progress = updateProgress(oldProgress: progress, newProgress: UInt8(currentStepDouble / maximumStepsDouble * 100))
-            
-           // print("=== ENROLL BIOMETRIC - \n     Progress: \(progress)")
-            
-            // inform the caller of the step that just finished
-            stepFinished(currentStep, maximumSteps)
-            
-           // print("=== ENROLL BIOMETRIC - \n     CurrentStep: \(currentStep)")
-        }
-        
-        //print("=== ENROLL BIOMETRIC - Enrollment Complete")
     }
     
     
