@@ -204,12 +204,12 @@ final class BiometricsAPI {
      
      */
     func enrollScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
-        var debugOutput = "----- BiometricsAPI Get Fingerprint Verification\n"
+        var debugOutput = "----- BiometricsAPI Enroll Scan Fingerprint\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
-
+        
         try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint, name: "Process Fingerprint", to: tag)
         
         debugOutput += "     Getting enrollment status\n"
@@ -230,7 +230,7 @@ final class BiometricsAPI {
      
      */
     func verifyEnrolledFingerprint(tag: NFCISO7816Tag) async throws {
-        var debugOutput = "----- BiometricsAPI Get Fingerprint Verification\n"
+        var debugOutput = "----- BiometricsAPI Verify Enrolled Fingerprint\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
