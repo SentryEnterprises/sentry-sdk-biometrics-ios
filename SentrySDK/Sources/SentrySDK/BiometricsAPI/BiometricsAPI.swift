@@ -241,6 +241,30 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
     }
 
+    /**
+     Resets the biometric data recorded on the card. This effectively erases all fingerprint enrollment and puts the card into an unenrolled state.
+     
+     - Warning: This is for development purposes only! This command only works on development cards, and fails when used on production cards.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     
+     */
+    func resetBiometricData(tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Reset BiometricData\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        try await sendAndConfirm(apduCommand: APDUCommand.resetBiometricData, name: "Reset Biometric Data", to: tag)
+        
+        debugOutput += "------------------------------\n"
+    }
+
     
     // MARK: - Private Methods
     

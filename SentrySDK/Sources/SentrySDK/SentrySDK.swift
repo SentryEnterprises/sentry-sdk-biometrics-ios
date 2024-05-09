@@ -224,6 +224,46 @@ public class SentrySDK: NSObject {
         }
     }
     
+    /**
+     Resets the biometric data recorded on the card. This effectively erases all fingerprint enrollment and puts the card into an unenrolled state.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
+     
+     - Warning: This is for development purposes only! This command only works on development cards, and fails when used on production cards.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.pinLengthOutOfbounds` if `enrollPinCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+
+     */
+    public func resetCard() async throws {
+        print("=== RESET CARD")
+        
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+        
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // reset the biometric data, setting the card into an unenrolled state
+            try await biometricsAPI.resetBiometricData(tag: isoTag)
+       } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
+
     
     // MARK: - Private Methods
 

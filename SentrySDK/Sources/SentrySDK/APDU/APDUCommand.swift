@@ -40,6 +40,9 @@ enum APDUCommand {
     /// Verifies fingerprint enrollment.
     static let verifyFingerprintEnrollment: [UInt8] = [0x00, 0x59, 0x00, 0x00, 0x01, 0x00]
     
+    /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
+    static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
+    
     /// Verifies the PIN.
     static func verifyPIN(pin: [UInt8]) throws -> [UInt8] {
         var verifyPINCommand: [UInt8] = [0x80, 0x20, 0x00, 0x80, 0x08]
