@@ -18,10 +18,10 @@ public enum APDUResponseCode: Int {
     
     /// Warning processing - state of non-volatile memory may have changed
     case noMatchFound = 0x6300
-    case pinIncorrectThreeTriesRemain = 0x63C3
-    case pinIncorrectTwoTriesRemain = 0x63C2
-    case pinIncorrectOneTriesRemain = 0x63C1
-    case pinIncorrectZeroTriesRemain = 0x63C0
+    case enrollCodeIncorrectThreeTriesRemain = 0x63C3
+    case enrollCodeIncorrectTwoTriesRemain = 0x63C2
+    case enrollCodeIncorrectOneTriesRemain = 0x63C1
+    case enrollCodeIncorrectZeroTriesRemain = 0x63C0
     
     /// Checking errors - wrong length
     case wrongLength = 0x6700

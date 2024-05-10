@@ -44,40 +44,40 @@ final class BiometricsAPI {
     // MARK: - Methods
     
     /**
-     Initializes the Enroll applet by selecting the applet on the java card and verifying the PIN. If no PIN is set, this sets the PIN to the indicated value. Call this
+     Initializes the Enroll applet by selecting the applet on the SentryCard and verifying the enroll code. If no enroll code is set, this sets the enroll code to the indicated value. Call this
      method before calling other methods in this unit.
      
      - Parameters:
-        - pin: An array of `UInt8` bytes containing the PIN digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
+        - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
      
      This method can throw the following exceptions:
-     * `SentrySDKError.pinLengthOutOfbounds` if the indicated `pin` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if the indicated `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
-     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      
      */
-    func initializeEnroll(pin: [UInt8], tag: NFCISO7816Tag) async throws {
-        var debugOutput = "----- BiometricsAPI Initialize Enroll - PIN: \(pin)\n"
+    func initializeEnroll(enrollCode: [UInt8], tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Initialize Enroll - Enroll Code: \(enrollCode)\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
          
-        // sanity check - PIN must be between 4 and 6 characters
-        if pin.count < 4 || pin.count > 6 {
-            throw SentrySDKError.pinLengthOutOfBounds
+        // sanity check - enroll code must be between 4 and 6 characters
+        if enrollCode.count < 4 || enrollCode.count > 6 {
+            throw SentrySDKError.enrollCodeLengthOutOfBounds
         }
         
         debugOutput += "     Selecting Enroll Applet\n"
         try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
 
-        debugOutput += "     Verifing PIN\n"
-        let returnData = try await send(apduCommand: APDUCommand.verifyPIN(pin: pin), name: "Verify PIN", to: tag)
+        debugOutput += "     Verifing Enroll Code\n"
+        let returnData = try await send(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
         
         if returnData.statusWord == APDUResponseCode.conditionOfUseNotSatisfied.rawValue {
-            debugOutput += "     PIN not set, setting\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.setPIN(pin: pin), name: "Set PIN", to: tag)
+            debugOutput += "     Enroll Code not set, setting\n"
+            try await sendAndConfirm(apduCommand: APDUCommand.setEnrollCode(code: enrollCode), name: "Set Enroll Code", to: tag)
 
             debugOutput += "     Sending PT1 command\n"
             try await sendAndConfirm(apduCommand: APDUCommand.setPT1, name: "PT1", to: tag)
@@ -91,13 +91,13 @@ final class BiometricsAPI {
             debugOutput += "     Storing\n"
             try await sendAndConfirm(apduCommand: APDUCommand.setStore, name: "Storing", to: tag)
             
-            // after setting the PIN, make sure the enrollment app is selected
+            // after setting the enroll code, make sure the enrollment app is selected
             debugOutput += "     Selecting Enroll applet again\n"
             try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
             
-            // verify the PIN again
-            debugOutput += "     Reverifying PIN\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.verifyPIN(pin: pin), name: "Verify PIN", to: tag)
+            // verify the enroll code again
+            debugOutput += "     Reverifying Enroll Code\n"
+            try await sendAndConfirm(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
         } else {
             if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
                 throw SentrySDKError.apduCommandError(returnData.statusWord)

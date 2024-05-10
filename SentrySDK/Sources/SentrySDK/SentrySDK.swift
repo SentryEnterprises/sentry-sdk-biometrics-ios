@@ -16,7 +16,7 @@ import CoreNFC
 public class SentrySDK: NSObject {
     // MARK: - Private Properties
     private let cardCommunicationError = "An error occurred while communicating with the card."
-    private let enrollPinCode: [UInt8]
+    private let enrollCode: [UInt8]
     private let biometricsAPI: BiometricsAPI
 
     private var session: NFCReaderSession?
@@ -30,13 +30,13 @@ public class SentrySDK: NSObject {
      Creates a new instance of `SentrySDK`.
      
      - Parameters:
-        - pin: An array of `UInt8` bytes containing the PIN digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
+        - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
      */
-    public init(pin: [UInt8], verboseDebugOutput: Bool = true) {
-        enrollPinCode = pin
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true) {
+        self.enrollCode = enrollCode
         biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput)
     }
     
@@ -51,9 +51,9 @@ public class SentrySDK: NSObject {
      - Returns: A `BiometricEnrollmentStatus` structure containing information on the fingerprint enrollment status.
      
      This method can throw the following exceptions:
-     * `SentrySDKError.pinLengthOutOfbounds` if `enrollPinCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
-     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
 
@@ -76,7 +76,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
             
             // get and return the enrollment status
             let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
@@ -98,9 +98,9 @@ public class SentrySDK: NSObject {
      - Returns:`True` if the scanned fingerprint matches one recorded during enrollment, otherwise returns `false`.
      
      This method can throw the following exceptions:
-     * `SentrySDKError.pinLengthOutOfbounds` if `enrollPinCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
-     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
@@ -123,7 +123,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
             
             // perform a biometric fingerprint verification
             let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
@@ -151,9 +151,9 @@ public class SentrySDK: NSObject {
         - stepFinished: A callback method that receives the current enrollment scan step that just finished, and the total number of steps required (i.e. scan two (2) out of the six (6) required). Callers should use this to update UI indicating the percentage completed.
      
      This method can throw the following exceptions:
-     * `SentrySDKError.pinLengthOutOfbounds` if `enrollPinCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
-     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
@@ -178,7 +178,7 @@ public class SentrySDK: NSObject {
             connected(true)
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(pin: enrollPinCode, tag: isoTag)
+            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
             
             // get the current enrollment status
             let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
@@ -232,9 +232,9 @@ public class SentrySDK: NSObject {
      - Warning: This is for development purposes only! This command only works on development cards, and fails when used on production cards.
      
      This method can throw the following exceptions:
-     * `SentrySDKError.pinLengthOutOfbounds` if `enrollPinCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
-     * `SentrySDKError.pinDigitOutOfBounds` if a PIN digit is not in the range 0-9.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
 

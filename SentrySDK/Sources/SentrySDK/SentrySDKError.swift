@@ -13,11 +13,11 @@ import Foundation
 public enum SentrySDKError: Error {
     // These errors can occur in production.
     
-    /// Individual PIN digits must be in the range 0 - 9.
-    case pinDigitOutOfBounds
+    /// Individual enroll code digits must be in the range 0 - 9.
+    case enrollCodeDigitOutOfBounds
     
-    /// The PIN must be between 4 - 6 characters in length.
-    case pinLengthOutOfBounds
+    /// The enroll code must be between 4 - 6 characters in length.
+    case enrollCodeLengthOutOfBounds
         
     /// We have an NFC connection, but no ISO7816 tag.
     case incorrectTagFormat
