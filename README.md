@@ -2,7 +2,7 @@
 ### Backed with CoreNFC
 
 ## Aims
-Provide an easy way for iOS developers to access biometric enrollment and other functionality on Sentry java cards via NFC Tags.
+Provide an easy way for iOS developers to access biometric enrollment and other functionality on the SentryCard platform.
 
 ## Version
 Unreleased
@@ -19,24 +19,24 @@ iOS       | 16     | >= 16
 ### Xcode Cloud ☁️
 Compatible ✅
 
-*Xcode Cloud requires Apple Developer Program membership.*
+* Xcode Cloud requires Apple Developer Program membership. *
 
 ## Requirements
-This is meant for use with the Java Card technology from Sentry Enterprises. As such, this library requires the following in order to utilize its full functionality:
+This is meant for use with the SentryCard from Sentry Enterprises. As such, this library requires the following in order to utilize its full functionality:
 
 1. NFC reader entitlements in the application capabilities and in the application's bundle identifier (see below).
 2. Several additions to the application's ```Custom iOS Target Properties``` (see below).
-3. A Java Card from Sentry Enterprises that includes the IDEX Enroll applet installed on the card.
+3. A SentryCard from Sentry Enterprises that includes the IDEX Enroll applet installed on the card.
 
 
 ## Guide
 
-###  IMPORTANT - ABOUT THE PIN
-While users are never meant to see or enter a PIN, the IDEX Enroll applet requires a PIN verification before it processes some commands. This PIN is usually set during initialization of the Java Card itself, and can vary depending on how the card is initialized. This usually happens through a script that is run using JCShell. 
+###  IMPORTANT - ABOUT THE ENROLL CODE
+While users are never meant to see or enter an enroll code, the IDEX Enroll applet requires an enroll code verification before it processes some commands. This enroll code is usually set during initialization of the SentryCard itself, and can vary depending on how the card is initialized. This usually happens through a script that is run using JCShell. 
 
-The PIN is required internally by the SentrySDK and is set in the constructor. This PIN is checked when first communicating with the Enroll applet on the card. The application implementing this library must take care to ensure that the PIN provided to the SentrySDK matches the PIN on the card. Otherwise, calls to initialize the Enroll applet will fail with ```0x63CX``` errors, and eventually the card will need to be reset after four (4) attempts. 
+The enroll code is required internally by the SentrySDK and is set in the constructor. This enroll code is checked when first communicating with the Enroll applet on the card. The application implementing this library must take care to ensure that the enroll code provided to the SentrySDK matches the enroll code on the card. Otherwise, calls to initialize the Enroll applet will fail with ```0x63CX``` errors, and eventually the card will need to be reset after four (4) attempts. 
 
-If no PIN is set, this library sets the PIN to the value provided to the SentrySDK in its constructor. The PIN MUST be 4-6 characters in length. Less than four (4) characters causes the app to throw an error. Any characters after the 6th are ignored.
+If no enroll code is set, this library sets the enroll code to the value provided to the SentrySDK in its constructor. The enroll code MUST be 4-6 characters in length. Less than four (4) characters causes the app to throw an error. Any characters after the 6th are ignored.
 
 
 ## Preparation
