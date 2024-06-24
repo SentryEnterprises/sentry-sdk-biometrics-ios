@@ -24,7 +24,7 @@ public enum SentrySDKError: Error {
     
     /// APDU specific error.
     case apduCommandError(Int)
-    
+        
     
     // The following errors should never occur, and indicate bugs in the code.
     
@@ -36,4 +36,16 @@ public enum SentrySDKError: Error {
     
     /// We have an NFC connection, but no NFC tag. This should only happen if something has changed in the SentrySDK and the connection logic is incorrect.
     case connectedWithoutTag
+    
+    /// Indicates that a secure channel with the card could not be created.
+    case secureChannelInitializationError
+    
+    /// Indicates an error in the data buffer returned from querying the java card OS version.
+    case cardOSVersionError
+    
+    /// Indicates an error occurred generating the public/private key pair, or other keys.
+    case keyGenerationError
+    
+    /// Indicates an error extracting the shared secrets data.
+    case sharedSecretExtractionError
 }

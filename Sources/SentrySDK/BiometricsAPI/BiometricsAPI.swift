@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreNFC
+import sentry_api_security
 
 /**
  Communicates with the IDEX Enroll applet by sending various `APDU` commands in the appropriate order.
@@ -21,8 +22,22 @@ final class BiometricsAPI {
 
     
     // MARK: - Private Properties
-    private var isDebugOutputVerbose = true
+    private let isDebugOutputVerbose: Bool
     
+    // Note - This is reset when selecting a new applet (i.e. after initing the secure channel)
+    private var encryptionCounter: [UInt8] = .init(repeating: 0, count: 16)
+    
+    // Note - this changes with every wrap, and resets when initing secure channel
+    private var chainingValue: [UInt8] = []
+    
+    private var privateKey: [UInt8] = []
+    private var publicKey: [UInt8] = []
+    private var sharedSecret: [UInt8] = []
+    private var keyRespt: [UInt8] = []
+    private var keyENC: [UInt8] = []
+    private var keyCMAC: [UInt8] = []
+    private var keyRMAC: [UInt8] = []
+
     
     // MARK: - Constructors
     
@@ -63,7 +78,7 @@ final class BiometricsAPI {
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
-         
+        
         // sanity check - enroll code must be between 4 and 6 characters
         if enrollCode.count < 4 || enrollCode.count > 6 {
             throw SentrySDKError.enrollCodeLengthOutOfBounds
@@ -71,38 +86,61 @@ final class BiometricsAPI {
         
         debugOutput += "     Selecting Enroll Applet\n"
         try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
-
-        debugOutput += "     Verifing Enroll Code\n"
-        let returnData = try await send(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
         
-        if returnData.statusWord == APDUResponseCode.conditionOfUseNotSatisfied.rawValue {
-            debugOutput += "     Enroll Code not set, setting\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.setEnrollCode(code: enrollCode), name: "Set Enroll Code", to: tag)
-
-            debugOutput += "     Sending PT1 command\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.setPT1, name: "PT1", to: tag)
-
-            debugOutput += "     Setting enrollment\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.setEnroll, name: "Enrollment", to: tag)
-
-            debugOutput += "     Setting enrollment limit\n"
-            try await send(apduCommand: APDUCommand.setEnrollLimit, name: "Enrollment Limit", to: tag)
-
-            debugOutput += "     Storing\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.setStore, name: "Storing", to: tag)
+        // TODO: Note - not removing this just yet
+        //        let version = try await selectEnrollAndGetVersion(tag: tag)
+        //        if version.majorVersion < 2 {
+        //            // TODO: Throw
+        //            print("------------ USING AN UNSUPPORTED VERSION OF THE ENROLL APPLET!!! --------------")
+        //        }
+        
+        // use a secure channel, setup keys
+        debugOutput += "     Initializing Secure Channel\n"
+        
+        encryptionCounter = .init(repeating: 0, count: 16)
+        chainingValue.removeAll(keepingCapacity: true)
+        privateKey.removeAll(keepingCapacity: true)
+        publicKey.removeAll(keepingCapacity: true)
+        sharedSecret.removeAll(keepingCapacity: true)
+        keyRespt.removeAll(keepingCapacity: true)
+        keyENC.removeAll(keepingCapacity: true)
+        keyCMAC.removeAll(keepingCapacity: true)
+        keyRMAC.removeAll(keepingCapacity: true)
+        
+        // initialize the secure channel. this sets up keys and encryption
+        let authInfo = try getAuthInitCommand()
+        privateKey.append(contentsOf: authInfo.privateKey)
+        publicKey.append(contentsOf: authInfo.publicKey)
+        sharedSecret.append(contentsOf: authInfo.sharedSecret)
+        
+        let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
+        
+        if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+            let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
             
-            // after setting the enroll code, make sure the enrollment app is selected
-            debugOutput += "     Selecting Enroll applet again\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
-            
-            // verify the enroll code again
-            debugOutput += "     Reverifying Enroll Code\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
+            keyRespt.append(contentsOf: secretKeys.keyRespt)
+            keyENC.append(contentsOf: secretKeys.keyENC)
+            keyCMAC.append(contentsOf: secretKeys.keyCMAC)
+            keyRMAC.append(contentsOf: secretKeys.keyRMAC)
+            chainingValue.append(contentsOf: secretKeys.chainingValue)
         } else {
-            if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
-                throw SentrySDKError.apduCommandError(returnData.statusWord)
-            }
+            throw SentrySDKError.secureChannelInitializationError
         }
+        
+        debugOutput += "     Verifing Enroll Code\n"
+        var enrollCodeCommand = try APDUCommand.verifyEnrollCode(code: enrollCode)
+        enrollCodeCommand = try wrapAPDUCommand(apduCommand: enrollCodeCommand, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        //let returnData =
+        try await sendAndConfirm(apduCommand: enrollCodeCommand, name: "Verify Enroll Code", to: tag)
+  
+        // TODO: Note - not removing this just yet
+//        let verifyEnrollCodeResult = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+//        
+//        print(verifyEnrollCodeResult)
+        
+//        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+//            throw SentrySDKError.apduCommandError(returnData.statusWord)
+//        }
         
         debugOutput += "------------------------------\n"
     }
@@ -127,10 +165,15 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        let returnData = try await send(apduCommand: APDUCommand.getEnrollStatus, name: "Get Enrollment Status", to: tag)
-                
-        // get the data as an array of bytes
-        let dataArray = returnData.data.toArrayOfBytes()
+        debugOutput += "     Getting enrollment status\n"
+        let enrollStatusCommand = try wrapAPDUCommand(apduCommand: APDUCommand.getEnrollStatus, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        let returnData = try await send(apduCommand: enrollStatusCommand, name: "Get Enroll Status", to: tag)
+        
+        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+            throw SentrySDKError.apduCommandError(returnData.statusWord)
+        }
+
+        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
         
         // sanity check - this buffer should be at least 40 bytes in length, possibly more
         if dataArray.count < 40 {
@@ -170,6 +213,9 @@ final class BiometricsAPI {
      
      */
     func getFingerprintVerification(tag: NFCISO7816Tag) async throws -> Bool {
+        
+        // TODO: !!! This needs to use the special applet, and implement encryption !!!
+        
         var debugOutput = "----- BiometricsAPI Get Fingerprint Verification\n"
         
         defer {
@@ -210,7 +256,8 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint, name: "Process Fingerprint", to: tag)
+        let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.processFingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Process Fingerprint", to: tag)
         
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
@@ -236,7 +283,9 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        try await sendAndConfirm(apduCommand: APDUCommand.verifyFingerprintEnrollment, name: "Verify Fingerprint", to: tag)
+        let verifyEnrollCommand = try wrapAPDUCommand(apduCommand: APDUCommand.verifyFingerprintEnrollment, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        
+        try await sendAndConfirm(apduCommand: verifyEnrollCommand, name: "Verify Enrolled Fingerprint", to: tag)
         
         debugOutput += "------------------------------\n"
     }
@@ -265,8 +314,456 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
     }
 
+    /**
+     Retrieves the version of the java card operating system installed on the scanned card.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: A `VersionInfo` structure containing version information.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
+    func getCardOSVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
+        var debugOutput = "----- BiometricsAPI Get Card OS Version\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Getting card OS version\n"
+        let returnData = try await sendAndConfirm(apduCommand: APDUCommand.getOSVersion, name: "Get Card OS Version", to: tag)
+        
+        debugOutput += "     Processing response\n"
+        let dataBuffer = returnData.data.toArrayOfBytes()
+        
+        if dataBuffer.count < 8 {
+            throw SentrySDKError.cardOSVersionError
+        }
+        
+        if dataBuffer[0] != 0xFE { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[1]  < 0x40 { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[2] != 0x7f { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[3] != 0x00 { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[4]  < 0x40 { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[5] != 0x9f { throw SentrySDKError.cardOSVersionError }
+        if dataBuffer[6] != 0x01 { throw SentrySDKError.cardOSVersionError }
+        
+        let n = dataBuffer[7]
+        var p: Int = 8 + Int(n)
+        
+        if dataBuffer[p] != 0x9F { throw SentrySDKError.cardOSVersionError }
+        p += 1
+        if dataBuffer[p] != 0x02 {throw SentrySDKError.cardOSVersionError }
+        p += 1
+        if dataBuffer[p] != 5 { throw SentrySDKError.cardOSVersionError }
+        p += 1
+        
+        let major = dataBuffer[p] - 0x30
+        p += 2
+        let minor = dataBuffer[p] - 0x30
+        p += 2
+        let hotfix = dataBuffer[p] - 0x30
+        
+        let retVal = VersionInfo(majorVersion: Int(major), minorVersion: Int(minor), hotfixVersion: Int(hotfix), text: nil)
+                
+        debugOutput += "     Card OS Version: \(retVal.majorVersion).\(retVal.minorVersion).\(retVal.hotfixVersion)\n------------------------------\n"
+        return retVal
+    }
+    
+    /**
+     Retrieves the version of the Enrollment applet installed on the scanned card (only available on version 2.0 or greater).
+     
+     - Note: If the Enrollment applet version on the card is earlier than 2.0, this returns -1 for all version values.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: A `VersionInfo` structure containing version information.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
+    func getEnrollmentAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
+        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var debugOutput = "----- BiometricsAPI Get Enrollment Applet Version\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+         
+        debugOutput += "     Selecting Enroll Applet\n"
+        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
+        
+        let responseBuffer = response.data.toArrayOfBytes()
+        
+        if responseBuffer.count < 16 {
+            return VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        } else {
+            let string = String(bytes: responseBuffer, encoding: .ascii)
+            let majorVersion = Int(responseBuffer[13] - 0x30)
+            let minorVersion = Int(responseBuffer[15] - 0x30)
+            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+        }
+        
+        debugOutput += "     Enrollment Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+        return version
+    }
+    
+    /**
+     Retrieves the version of the CDCVM applet installed on the scanned card (only available on version 2.0 or greater).
+     
+     - Note: If the CDCVM applet version on the card is earlier than 2.0, this returns -1 for all version values.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: A `VersionInfo` structure containing version information.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
+    func getCVMAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
+        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var debugOutput = "----- BiometricsAPI Get CVM Applet Version\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+         
+        debugOutput += "     Selecting CVM Applet\n"
+        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectCVMApplet, name: "Select CVM Applet", to: tag)
+        
+        let responseBuffer = response.data.toArrayOfBytes()
+        
+        if responseBuffer.count > 11 {
+            let string = String(bytes: responseBuffer, encoding: .ascii)
+            let majorVersion = Int(responseBuffer[10] - 0x30)
+            let minorVersion = Int(responseBuffer[12] - 0x30)
+            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+        }
+
+        debugOutput += "     CVM Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+        return version
+    }
+    
+    // TODO: Coming Soon!
+    func getVerifyAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
+        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var debugOutput = "----- BiometricsAPI Get Verify Applet Version\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+         
+        // TODO: Fix
+//        debugOutput += "     Selecting Verify Applet\n"
+//        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+//        
+//        let responseBuffer = response.data.toArrayOfBytes()
+//        
+//        if responseBuffer.count > 25 {
+//            let majorVersion = Int(responseBuffer[20] - 30)
+//            let minorVersion = Int(responseBuffer[24] - 30)
+//            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0)
+//        }
+
+        debugOutput += "     Verify Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+        return version
+    }
+    
     
     // MARK: - Private Methods
+    
+    // TODO: Note - not removing this just yet
+//    private func selectEnrollAndGetVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
+//        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
+//        
+//        let responseBuffer = response.data.toArrayOfBytes()
+//        
+//        if responseBuffer.count < 16 {
+//            return VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+//        } else {
+//            let string = String(bytes: responseBuffer, encoding: .ascii)            
+//            let majorVersion = Int(responseBuffer[13] - 0x30)
+//            let minorVersion = Int(responseBuffer[15] - 0x30)
+//            return VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+//        }
+//    }
+    
+    /// Encodes an APDU command.
+    private func wrapAPDUCommand(apduCommand: [UInt8], keyENC: [UInt8], keyCMAC: [UInt8], chainingValue: inout [UInt8], encryptionCounter: inout [UInt8]) throws -> [UInt8] {
+        let command = UnsafeMutablePointer<UInt8>.allocate(capacity: apduCommand.count)
+        let wrappedCommand = UnsafeMutablePointer<UInt8>.allocate(capacity: 300)
+        let ENC = UnsafeMutablePointer<UInt8>.allocate(capacity: keyENC.count)
+        let CMAC = UnsafeMutablePointer<UInt8>.allocate(capacity: keyCMAC.count)
+        let chaining = UnsafeMutablePointer<UInt8>.allocate(capacity: chainingValue.count)
+        let counter = UnsafeMutablePointer<UInt8>.allocate(capacity: encryptionCounter.count)
+        let wrappedLength =  UnsafeMutablePointer<UInt32>.allocate(capacity: 1)
+
+        defer {
+            command.deallocate()
+            wrappedCommand.deallocate()
+            ENC.deallocate()
+            CMAC.deallocate()
+            chaining.deallocate()
+            counter.deallocate()
+            wrappedLength.deallocate()
+        }
+        
+        for i in 0..<apduCommand.count {
+            command.advanced(by: i).pointee = apduCommand[i]
+        }
+        
+        for i in 0..<keyENC.count {
+            ENC.advanced(by: i).pointee = keyENC[i]
+        }
+
+        for i in 0..<keyCMAC.count {
+            CMAC.advanced(by: i).pointee = keyCMAC[i]
+        }
+
+        for i in 0..<chainingValue.count {
+            chaining.advanced(by: i).pointee = chainingValue[i]
+        }
+        
+        for i in 0..<encryptionCounter.count {
+            counter.advanced(by: i).pointee = encryptionCounter[i]
+        }
+
+        let response = LibAuthWrap(command, UInt32(apduCommand.count), wrappedCommand, wrappedLength, ENC, CMAC, chaining, counter)
+        
+        if response != SUCCESS {
+            if response == ERROR_KEYGENERATION {
+                throw SentrySDKError.keyGenerationError
+            }
+            if response == ERROR_SHAREDSECRETEXTRACTION {
+                throw SentrySDKError.sharedSecretExtractionError
+            }
+            
+            // TODO: Fix once we've converted security to pure Swift
+            throw NSError(domain: "Unknown return value", code: -1)
+        }
+        
+        for i in 0..<encryptionCounter.count {
+            encryptionCounter[i] = counter.advanced(by: i).pointee
+        }
+        
+        for i in 0..<chainingValue.count {
+            chainingValue[i] = chaining.advanced(by: i).pointee
+        }
+
+        var result: [UInt8] = []
+        for i in 0..<wrappedLength.pointee {
+            result.append(wrappedCommand.advanced(by: Int(i)).pointee)
+        }
+        
+        return result
+    }
+    
+    /// Decodes an APDU command response.
+    private func unwrapAPDUResponse(response: [UInt8], statusWord: Int, keyENC: [UInt8], keyRMAC: [UInt8], chainingValue: [UInt8], encryptionCounter: [UInt8]) throws -> [UInt8] {
+        let responseData = UnsafeMutablePointer<UInt8>.allocate(capacity: response.count + 2)
+        let unwrappedResponse = UnsafeMutablePointer<UInt8>.allocate(capacity: 300)
+        let ENC = UnsafeMutablePointer<UInt8>.allocate(capacity: keyENC.count)
+        let RMAC = UnsafeMutablePointer<UInt8>.allocate(capacity: keyRMAC.count)
+        let chaining = UnsafeMutablePointer<UInt8>.allocate(capacity: chainingValue.count)
+        let counter = UnsafeMutablePointer<UInt8>.allocate(capacity: encryptionCounter.count)
+        let unwrappedLength = UnsafeMutablePointer<UInt32>.allocate(capacity: 1)
+
+        defer {
+            responseData.deallocate()
+            unwrappedResponse.deallocate()
+            ENC.deallocate()
+            RMAC.deallocate()
+            chaining.deallocate()
+            counter.deallocate()
+            unwrappedLength.deallocate()
+        }
+        
+        for i in 0..<response.count {
+            responseData.advanced(by: i).pointee = response[i]
+        }
+        responseData.advanced(by: response.count).pointee = UInt8(statusWord >> 8)
+        responseData.advanced(by: response.count + 1).pointee = UInt8(statusWord & 0x00FF)
+        
+        for i in 0..<keyENC.count {
+            ENC.advanced(by: i).pointee = keyENC[i]
+        }
+
+        for i in 0..<keyRMAC.count {
+            RMAC.advanced(by: i).pointee = keyRMAC[i]
+        }
+
+        for i in 0..<chainingValue.count {
+            chaining.advanced(by: i).pointee = chainingValue[i]
+        }
+        
+        for i in 0..<encryptionCounter.count {
+            counter.advanced(by: i).pointee = encryptionCounter[i]
+        }
+
+        let response = LibAuthUnwrap(responseData, UInt32(response.count + 2), unwrappedResponse, unwrappedLength, ENC, RMAC, chaining, counter)
+        
+        if response != SUCCESS {
+            if response == ERROR_KEYGENERATION {
+                throw SentrySDKError.keyGenerationError
+            }
+            if response == ERROR_SHAREDSECRETEXTRACTION {
+                throw SentrySDKError.sharedSecretExtractionError
+            }
+            
+            // TODO: Fix once we've converted security to pure Swift
+            throw NSError(domain: "Unknown return value", code: -1)
+        }
+        
+
+        var result: [UInt8] = []
+        for i in 0..<unwrappedLength.pointee {
+            result.append(unwrappedResponse.advanced(by: Int(i)).pointee)
+        }
+        
+        return result
+    }
+    
+    // done after select but before verifying pin
+    // returns 5F494104 <keys> 8610 <chaining value> 9000
+    // 5F494104 D13CD1EDF0CFDC960CB8CC060DEA15203D6C3D7C81B8DA8D020C012652E8A50CE59D462EEBFBC6A3AF55C47E5DCD897EFD371321389DA2B227EEF48FA6143106 8610 498EDA1B2CDF9E20BEE060BA439FAB20 9000
+    // whatever processes the response from this command should check:
+    //  starts with 5F494104
+    //  calls calcSecretKeys
+    //  checks 8610 and extracts the chaining value
+    // Note: We may need to call this and calcSecretKeys each time a new applet is selected!
+    
+    /// Initializes secure communication.
+    private func getAuthInitCommand() throws -> AuthInitData {
+        let apduCommand = UnsafeMutablePointer<UInt8>.allocate(capacity: 89)
+        let privateKey = UnsafeMutablePointer<UInt8>.allocate(capacity: 32)
+        let publicKey = UnsafeMutablePointer<UInt8>.allocate(capacity: 64)
+        let secretShses = UnsafeMutablePointer<UInt8>.allocate(capacity: 32)
+        defer {
+            apduCommand.deallocate()
+            privateKey.deallocate()
+            publicKey.deallocate()
+            secretShses.deallocate()
+        }
+        
+        let response = LibSecureChannelInit(apduCommand, privateKey, publicKey, secretShses)
+        
+        // TODO: Fix; LibSecureChannelInit is returning a length, not a success value
+//        if response != SUCCESS {
+//            if response == ERROR_KEYGENERATION {
+//                throw SentrySDKError.keyGenerationError
+//            }
+//            if response == ERROR_SHAREDSECRETEXTRACTION {
+//                throw SentrySDKError.sharedSecretExtractionError
+//            }
+//        }
+        
+        var command: [UInt8] = []
+        var privKey: [UInt8] = []
+        var pubKey: [UInt8] = []
+        var sharedSecret: [UInt8] = []
+        
+        for i in 0..<89 {
+            command.append(apduCommand.advanced(by: i).pointee)
+        }
+        
+        for i in 0..<32 {
+            privKey.append(privateKey.advanced(by: i).pointee)
+        }
+        
+        for i in 0..<64 {
+            pubKey.append(publicKey.advanced(by: i).pointee)
+        }
+        
+        for i in 0..<32 {
+            sharedSecret.append(secretShses.advanced(by: i).pointee)
+        }
+
+        return AuthInitData(apduCommand: command, privateKey: privKey, publicKey: pubKey, sharedSecret: sharedSecret)
+    }
+    
+    /// Calculates secret keys.
+    private func calcSecretKeys(receivedPubKey: [UInt8], sharedSecret: [UInt8], privateKey: [UInt8]) throws -> Keys {
+        let pubKey = UnsafeMutablePointer<UInt8>.allocate(capacity: receivedPubKey.count)
+        let shses = UnsafeMutablePointer<UInt8>.allocate(capacity: sharedSecret.count)
+        let privatekey = UnsafeMutablePointer<UInt8>.allocate(capacity: privateKey.count)
+        let keyRespt = UnsafeMutablePointer<UInt8>.allocate(capacity: 16)
+        let keyENC = UnsafeMutablePointer<UInt8>.allocate(capacity: 16)
+        let keyCMAC = UnsafeMutablePointer<UInt8>.allocate(capacity: 16)
+        let keyRMAC = UnsafeMutablePointer<UInt8>.allocate(capacity: 16)
+        let chaining = UnsafeMutablePointer<UInt8>.allocate(capacity: 16)
+        
+        defer {
+            pubKey.deallocate()
+            shses.deallocate()
+            privatekey.deallocate()
+            keyRespt.deallocate()
+            keyENC.deallocate()
+            keyCMAC.deallocate()
+            keyRMAC.deallocate()
+            chaining.deallocate()
+        }
+        
+        for i in 0..<receivedPubKey.count {
+            pubKey.advanced(by: i).pointee = receivedPubKey[i]
+        }
+        
+        for i in 0..<sharedSecret.count {
+            shses.advanced(by: i).pointee = sharedSecret[i]
+        }
+
+        for i in 0..<privateKey.count {
+            privatekey.advanced(by: i).pointee = privateKey[i]
+        }
+        
+        let response = LibCalcSecretKeys(pubKey, shses, privatekey, keyRespt, keyENC, keyCMAC, keyRMAC, chaining)
+        
+        if response != SUCCESS {
+            if response == ERROR_KEYGENERATION {
+                throw SentrySDKError.keyGenerationError
+            }
+            if response == ERROR_SHAREDSECRETEXTRACTION {
+                throw SentrySDKError.sharedSecretExtractionError
+            }
+            
+            // TODO: Fix once we've converted security to pure Swift
+            throw NSError(domain: "Unknown return value", code: -1)
+        }
+
+        var respt: [UInt8] = []
+        var enc: [UInt8] = []
+        var cmac: [UInt8] = []
+        var rmac: [UInt8] = []
+        var chainVal: [UInt8] = []
+        
+        for i in 0..<16 {
+            respt.append(keyRespt.advanced(by: i).pointee)
+        }
+        
+        for i in 0..<16 {
+            enc.append(keyENC.advanced(by: i).pointee)
+        }
+
+        for i in 0..<16 {
+            cmac.append(keyCMAC.advanced(by: i).pointee)
+        }
+
+        for i in 0..<16 {
+            rmac.append(keyRMAC.advanced(by: i).pointee)
+        }
+        
+        for i in 0..<16 {
+            chainVal.append(chaining.advanced(by: i).pointee)
+        }
+
+        return Keys(keyRespt: respt, keyENC: enc, keyCMAC: cmac, keyRMAC: rmac, chainingValue: chainVal)
+    }
     
     /// Sends an APDU command, throwing an exception if that command does not respond with a successful operation value.
     @discardableResult private func sendAndConfirm(apduCommand: [UInt8], name: String? = nil, to tag: NFCISO7816Tag) async throws -> APDUReturnResult {

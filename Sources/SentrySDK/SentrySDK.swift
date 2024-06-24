@@ -7,6 +7,7 @@
 
 import Foundation
 import CoreNFC
+import sentry_api_security
 
 /**
  Entry point for the `SentrySDK` functionality. Provides methods exposing all available functionality.
@@ -23,6 +24,33 @@ public class SentrySDK: NSObject {
     private var connectedTag: NFCISO7816Tag?
     private var callback: ((Result<NFCISO7816Tag, Error>) -> Void)?
     
+    
+    // MARK: - Public Properties
+    
+    /// Returns the version SDK version (read-only)
+    public static var version: VersionInfo {
+        get { return VersionInfo(majorVersion: 0, minorVersion: 3, hotfixVersion: 0, text: nil) }
+    }
+    
+    /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
+    public static var securityVersion: VersionInfo {
+        get {
+            let pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: 3)
+            defer {
+                pointer.deallocate()
+            }
+            
+            LibSdkGetSdkVersion(pointer)
+            
+            var result: [UInt8] = []
+            
+            for i in 0..<3 {
+                result.append(pointer.advanced(by: i).pointee)
+            }
+            
+            return VersionInfo(majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
+        }
+    }
     
     // MARK: - Constructors
 
@@ -42,6 +70,51 @@ public class SentrySDK: NSObject {
     
     
     // MARK: - Public Methods
+    
+    /**
+     Retrieves version information for all necessary software installed on the scanned java card.
+     
+     - Note: Applets prior to version 2.0 do not support this functionality and return -1 for all version values. This method is provided for debugging purposes.
+     
+     - Returns: A `CardVersionInfo` structure containing `VersionInfo` structures for the java card operating system and all required applets, if those applets are installed.
+     */
+    public func getCardSoftwareVersions() async throws -> CardVersionInfo {
+        print("=== GET CARD SOFTWARE VERSION")
+        
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // get card OS version
+            let osVersion = try await biometricsAPI.getCardOSVersion(tag: isoTag)
+            print("OS: \(osVersion)")
+            
+            // get applet version
+            let enrollVersion = try await biometricsAPI.getEnrollmentAppletVersion(tag: isoTag)
+            print("Enroll: \(enrollVersion)")
+            
+            let cvmVersion = try await biometricsAPI.getCVMAppletVersion(tag: isoTag)
+            print("CVM: \(cvmVersion)")
+            
+            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
+            print("Verify: \(verifyVersion)")
+            
+            return CardVersionInfo(osVersion: osVersion, enrollAppletVersion: enrollVersion, cvmAppletVersion: cvmVersion, verifyAppletVersion: verifyVersion)
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
     
     /**
      Retrieves the biometric fingerprint enrollment status.
@@ -188,35 +261,23 @@ public class SentrySDK: NSObject {
             var progress = updateProgress(oldProgress: 0, newProgress: 0)
             var enrollmentsLeft = maximumSteps
             
-            // print("=== ENROLL BIOMETRIC - \n     MaxSteps: \(maximumSteps)\n     Progress: \(progress)\n     Remaining: \(enrollmentsLeft)")
-            
             while enrollmentsLeft > 0 {
-                //print("=== ENROLL BIOMETRIC - Enrolling, Remaining: \(enrollmentsLeft)")
-                
                 // scan the finger currently on the sensor
                 let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
                 if remainingEnrollments <= 0 {
                     try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
                 }
                 enrollmentsLeft = remainingEnrollments
-                
-                // print("=== ENROLL BIOMETRIC - \n     Remaining: \(enrollmentsLeft)")
-                
+                                
                 // update the NFC session UI with the current progress percentage
                 let currentStep = maximumSteps - enrollmentsLeft
                 let currentStepDouble = Double(currentStep)
                 let maximumStepsDouble = Double(maximumSteps)
                 progress = updateProgress(oldProgress: progress, newProgress: UInt8(currentStepDouble / maximumStepsDouble * 100))
                 
-                // print("=== ENROLL BIOMETRIC - \n     Progress: \(progress)")
-                
                 // inform the caller of the step that just finished
                 stepFinished(currentStep, maximumSteps)
-                
-                // print("=== ENROLL BIOMETRIC - \n     CurrentStep: \(currentStep)")
             }
-            
-            //print("=== ENROLL BIOMETRIC - Enrollment Complete")
         } catch (let error) {
             errorDuringSession = true
             connected(false)

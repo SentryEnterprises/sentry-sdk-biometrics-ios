@@ -14,11 +14,15 @@ let package = Package(
             name: "SentrySDK",
             targets: ["SentrySDK"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/SentryEnterprises/sentry-api-security", branch: "main")
+    ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "SentrySDK"),
+            name: "SentrySDK",
+        dependencies: ["sentry-api-security"]),
         .testTarget(
             name: "SentrySDKTests",
             dependencies: ["SentrySDK"]),
