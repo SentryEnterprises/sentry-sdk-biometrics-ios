@@ -116,6 +116,35 @@ public class SentrySDK: NSObject {
         }
     }
     
+    public func getStoredData() async throws -> [UInt8]  {
+        print("=== GET STORED DATA")
+        
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Verify applet
+            try await biometricsAPI.initializeVerify(tag: isoTag)
+            
+            // get and return the stored data
+            let storedData = try await biometricsAPI.getVerifyStoredData(tag: isoTag)
+            return storedData
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
+
     /**
      Retrieves the biometric fingerprint enrollment status.
      
