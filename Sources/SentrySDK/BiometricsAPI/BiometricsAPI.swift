@@ -451,7 +451,18 @@ final class BiometricsAPI {
         return version
     }
     
-    // TODO: Coming Soon!
+    /**
+     Retrieves the version of the Verify applet installed on the scanned card.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: A `VersionInfo` structure containing version information.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
     func getVerifyAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
         var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
         var debugOutput = "----- BiometricsAPI Get Verify Applet Version\n"
@@ -460,17 +471,17 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
          
-        // TODO: Fix
-//        debugOutput += "     Selecting Verify Applet\n"
-//        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
-//        
-//        let responseBuffer = response.data.toArrayOfBytes()
-//        
-//        if responseBuffer.count > 25 {
-//            let majorVersion = Int(responseBuffer[20] - 30)
-//            let minorVersion = Int(responseBuffer[24] - 30)
-//            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0)
-//        }
+        debugOutput += "     Selecting Verify Applet\n"
+        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+        let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
+        
+        let responseBuffer = response.data.toArrayOfBytes()
+        
+        if responseBuffer.count > 4 {
+            let majorVersion = Int(responseBuffer[3])
+            let minorVersion = Int(responseBuffer[4])
+            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+        }
 
         debugOutput += "     Verify Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
