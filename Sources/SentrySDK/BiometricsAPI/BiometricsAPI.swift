@@ -58,6 +58,86 @@ final class BiometricsAPI {
     
     // MARK: - Methods
     
+    func initializeVerify(tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Initialize Verify\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Selecting Verify Applet\n"
+        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select", to: tag)
+        
+        // use a secure channel, setup keys
+        debugOutput += "     Initializing Secure Channel\n"
+        
+        encryptionCounter = .init(repeating: 0, count: 16)
+        chainingValue.removeAll(keepingCapacity: true)
+        privateKey.removeAll(keepingCapacity: true)
+        publicKey.removeAll(keepingCapacity: true)
+        sharedSecret.removeAll(keepingCapacity: true)
+        keyRespt.removeAll(keepingCapacity: true)
+        keyENC.removeAll(keepingCapacity: true)
+        keyCMAC.removeAll(keepingCapacity: true)
+        keyRMAC.removeAll(keepingCapacity: true)
+        
+        // initialize the secure channel. this sets up keys and encryption
+        let authInfo = try getAuthInitCommand()
+        privateKey.append(contentsOf: authInfo.privateKey)
+        publicKey.append(contentsOf: authInfo.publicKey)
+        sharedSecret.append(contentsOf: authInfo.sharedSecret)
+        
+        let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
+        
+        if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+            let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
+            
+            keyRespt.append(contentsOf: secretKeys.keyRespt)
+            keyENC.append(contentsOf: secretKeys.keyENC)
+            keyCMAC.append(contentsOf: secretKeys.keyCMAC)
+            keyRMAC.append(contentsOf: secretKeys.keyRMAC)
+            chainingValue.append(contentsOf: secretKeys.chainingValue)
+        } else {
+            throw SentrySDKError.secureChannelInitializationError
+        }
+        
+        debugOutput += "------------------------------\n"
+    }
+    
+    func getVerifyStoredData(tag: NFCISO7816Tag) async throws -> [UInt8] {
+        var debugOutput = "----- BiometricsAPI Get Verify Stored Data\n"
+
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Getting verify stored data\n"
+        let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data", to: tag)
+        
+        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+            throw SentrySDKError.apduCommandError(returnData.statusWord)
+        }
+
+        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        
+        // sanity check - this buffer should be at least 40 bytes in length, possibly more
+//        if dataArray.count < 40 {
+//            throw SentrySDKError.enrollmentStatusBufferTooSmall
+//        }
+        
+//        // extract values from specific index in the array
+//        let maxNumberOfFingers = dataArray[31]
+//        let enrolledTouches = dataArray[32]
+//        let remainingTouches = dataArray[33]
+//        let mode = dataArray[39]
+//        
+//        debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     Enrolled Touches: \(enrolledTouches)\n     Remaining Touches: \(remainingTouches)\n     Mode: \(mode)\n"
+
+        
+        debugOutput += "------------------------------\n"
+        return dataArray
+    }
     /**
      Initializes the Enroll applet by selecting the applet on the SentryCard and verifying the enroll code. If no enroll code is set, this sets the enroll code to the indicated value. Call this
      method before calling other methods in this unit.
