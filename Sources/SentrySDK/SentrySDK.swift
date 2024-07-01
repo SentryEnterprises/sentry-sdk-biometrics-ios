@@ -10,8 +10,8 @@ import CoreNFC
 import sentry_api_security
 
 public struct FingerprintValidationAndData {
-    let doesFingerprintMatch: Bool
-    let storedData: [UInt8]
+    public let doesFingerprintMatch: Bool
+    public let storedData: [UInt8]
 }
 
 /**
