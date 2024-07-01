@@ -9,6 +9,11 @@ import Foundation
 import CoreNFC
 import sentry_api_security
 
+public struct FingerprintValidationAndData {
+    let doesFingerprintMatch: Bool
+    let storedData: [UInt8]
+}
+
 /**
  Entry point for the `SentrySDK` functionality. Provides methods exposing all available functionality.
  
@@ -236,7 +241,7 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func validateFingerprint() async throws -> Bool {
+    public func validateFingerprint() async throws -> FingerprintValidationAndData {
         print("=== VALIDATE FINGERPRINT")
         
         var errorDuringSession = false
@@ -257,7 +262,9 @@ public class SentrySDK: NSObject {
             try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
             
             // perform a biometric fingerprint verification
-            let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
+            //let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
+            let result = try await biometricsAPI.getFingerprintVerificationAndStoredData(tag: isoTag)
+            
             return result
         } catch (let error) {
             errorDuringSession = true

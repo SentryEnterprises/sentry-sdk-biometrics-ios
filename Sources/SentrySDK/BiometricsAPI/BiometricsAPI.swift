@@ -304,6 +304,29 @@ final class BiometricsAPI {
         )
     }
     
+    func getFingerprintVerificationAndStoredData(tag: NFCISO7816Tag) async throws -> FingerprintValidationAndData {
+        var debugOutput = "----- BiometricsAPI Get Fingerprint Verification And Stored Data\n"
+        var storedData: [UInt8] = []
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+
+        debugOutput += "     Get Fingerprint Verification\n"
+        let isVerified = try await getFingerprintVerification(tag: tag)
+        
+        if isVerified {
+            debugOutput += "     Selecting Verify applet\n"
+            try await initializeVerify(tag: tag)
+            
+            debugOutput += "     Storing data\n"
+            storedData.append(contentsOf: try await getVerifyStoredData(tag: tag))
+        }
+        
+        debugOutput += "------------------------------\n"
+        return FingerprintValidationAndData(doesFingerprintMatch: isVerified, storedData: storedData)
+    }
+    
     /**
      Scans the finger currently on the fingerprint sensor, indicating if the scanned fingerprint matches one recorded during enrollment.
      
