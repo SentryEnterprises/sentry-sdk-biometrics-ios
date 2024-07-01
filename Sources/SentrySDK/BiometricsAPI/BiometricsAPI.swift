@@ -112,14 +112,16 @@ final class BiometricsAPI {
         }
         
         debugOutput += "     Getting verify stored data\n"
-        let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        //let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        let command = APDUCommand.getVerifyAppletStoredData
         let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data", to: tag)
         
         if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
             throw SentrySDKError.apduCommandError(returnData.statusWord)
         }
 
-        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+//        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        let dataArray = returnData.data.toArrayOfBytes()
         
         // sanity check - this buffer should be at least 40 bytes in length, possibly more
 //        if dataArray.count < 40 {
@@ -138,6 +140,28 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
         return dataArray
     }
+    
+    func setVerifyStoredData(tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Set Verify Stored Data\n"
+
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Setting verify stored data\n"
+        //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        let command = APDUCommand.setVerifyAppletStoredData
+        try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data", to: tag)
+        
+//        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+//            throw SentrySDKError.apduCommandError(returnData.statusWord)
+//        }
+//
+//        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        
+        debugOutput += "------------------------------\n"
+    }
+
     /**
      Initializes the Enroll applet by selecting the applet on the SentryCard and verifying the enroll code. If no enroll code is set, this sets the enroll code to the indicated value. Call this
      method before calling other methods in this unit.

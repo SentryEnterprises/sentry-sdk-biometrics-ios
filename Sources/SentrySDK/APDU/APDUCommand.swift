@@ -53,7 +53,10 @@ enum APDUCommand {
     static let getVerifyAppletVersion: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
     
     /// Retrieves the data stored in the Verify applet.
-    static let getVerifyAppletStoredData: [UInt8] = [0x84, 0xCA, 0x5F, 0xC1, 0x00]
+    static let getVerifyAppletStoredData: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
+
+    /// Sets the data stored in the Verify applet.
+    static let setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xC2, 0x00]
 
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
