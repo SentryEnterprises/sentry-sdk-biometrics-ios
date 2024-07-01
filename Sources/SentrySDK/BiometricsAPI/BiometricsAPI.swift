@@ -472,15 +472,21 @@ final class BiometricsAPI {
         }
          
         debugOutput += "     Selecting Verify Applet\n"
-        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
-        let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
         
-        let responseBuffer = response.data.toArrayOfBytes()
-        
-        if responseBuffer.count > 4 {
-            let majorVersion = Int(responseBuffer[3])
-            let minorVersion = Int(responseBuffer[4])
-            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+        // the Verify applet may not be there, so we'll assume any exceptions thrown here are a result of the app missing from the card
+        do {
+            try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+            let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
+            
+            let responseBuffer = response.data.toArrayOfBytes()
+            
+            if responseBuffer.count > 4 {
+                let majorVersion = Int(responseBuffer[3])
+                let minorVersion = Int(responseBuffer[4])
+                version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+            }
+        } catch (let error) {
+            debugOutput += "     Unable to get Verify applet version: \(error)\n"
         }
 
         debugOutput += "     Verify Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
