@@ -144,6 +144,35 @@ public class SentrySDK: NSObject {
             throw error
         }
     }
+    
+    public func SetStoredData(data: [UInt8]) async throws {
+        print("=== SET STORED DATA")
+        
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Verify applet
+            try await biometricsAPI.initializeVerify(tag: isoTag)
+            
+            // get and return the stored data
+            try await biometricsAPI.setVerifyStoredData(data: data, tag: isoTag)
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
+
 
     /**
      Retrieves the biometric fingerprint enrollment status.
@@ -260,7 +289,7 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func enrollFingerprint(connected: (Bool) -> Void, stepFinished: (_ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws  {
+    public func enrollFingerprint(dataToStore: [UInt8], connected: (Bool) -> Void, stepFinished: (_ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
         print("=== ENROLL BIOMETRIC")
         
         var errorDuringSession = false
@@ -294,7 +323,8 @@ public class SentrySDK: NSObject {
                 // scan the finger currently on the sensor
                 let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
                 if remainingEnrollments <= 0 {
-                    try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                    //try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                    try await biometricsAPI.verifyEnrolledFingerprintAndStoreData(data: dataToStore, tag: isoTag)
                 }
                 enrollmentsLeft = remainingEnrollments
                                 

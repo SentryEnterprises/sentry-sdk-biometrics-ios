@@ -55,12 +55,8 @@ enum APDUCommand {
     /// Retrieves the data stored in the Verify applet.
     static let getVerifyAppletStoredData: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
 
-    /// Sets the data stored in the Verify applet.
-    static let setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xC2, 0x00]
-
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
-        
     
     /// Verifies the enroll code.
     static func verifyEnrollCode(code: [UInt8]) throws -> [UInt8] {
@@ -74,6 +70,16 @@ enum APDUCommand {
         var setCodeCommand: [UInt8] = [ 0x80, 0xE2, 0x08, 0x00, 0x0B, 0x90, 0x00, 0x08]
         try setCodeCommand.append(contentsOf: constructCodeBuffer(code: code))
         return setCodeCommand
+    }
+    
+    // TODO: Restrict this to 255 bytes
+    /// Sets the data stored in the Verify applet.
+    static func setVerifyAppletStoredData(data: [UInt8]) throws -> [UInt8] {
+        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xC2]
+        setVerifyAppletStoredData.append(UInt8(data.count))
+        setVerifyAppletStoredData.append(contentsOf: data)
+        
+        return setVerifyAppletStoredData
     }
 
     

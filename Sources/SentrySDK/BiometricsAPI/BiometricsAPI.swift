@@ -68,38 +68,38 @@ final class BiometricsAPI {
         debugOutput += "     Selecting Verify Applet\n"
         try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select", to: tag)
         
-        // use a secure channel, setup keys
-        debugOutput += "     Initializing Secure Channel\n"
-        
-        encryptionCounter = .init(repeating: 0, count: 16)
-        chainingValue.removeAll(keepingCapacity: true)
-        privateKey.removeAll(keepingCapacity: true)
-        publicKey.removeAll(keepingCapacity: true)
-        sharedSecret.removeAll(keepingCapacity: true)
-        keyRespt.removeAll(keepingCapacity: true)
-        keyENC.removeAll(keepingCapacity: true)
-        keyCMAC.removeAll(keepingCapacity: true)
-        keyRMAC.removeAll(keepingCapacity: true)
-        
-        // initialize the secure channel. this sets up keys and encryption
-        let authInfo = try getAuthInitCommand()
-        privateKey.append(contentsOf: authInfo.privateKey)
-        publicKey.append(contentsOf: authInfo.publicKey)
-        sharedSecret.append(contentsOf: authInfo.sharedSecret)
-        
-        let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
-        
-        if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
-            let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
-            
-            keyRespt.append(contentsOf: secretKeys.keyRespt)
-            keyENC.append(contentsOf: secretKeys.keyENC)
-            keyCMAC.append(contentsOf: secretKeys.keyCMAC)
-            keyRMAC.append(contentsOf: secretKeys.keyRMAC)
-            chainingValue.append(contentsOf: secretKeys.chainingValue)
-        } else {
-            throw SentrySDKError.secureChannelInitializationError
-        }
+//        // use a secure channel, setup keys
+//        debugOutput += "     Initializing Secure Channel\n"
+//        
+//        encryptionCounter = .init(repeating: 0, count: 16)
+//        chainingValue.removeAll(keepingCapacity: true)
+//        privateKey.removeAll(keepingCapacity: true)
+//        publicKey.removeAll(keepingCapacity: true)
+//        sharedSecret.removeAll(keepingCapacity: true)
+//        keyRespt.removeAll(keepingCapacity: true)
+//        keyENC.removeAll(keepingCapacity: true)
+//        keyCMAC.removeAll(keepingCapacity: true)
+//        keyRMAC.removeAll(keepingCapacity: true)
+//        
+//        // initialize the secure channel. this sets up keys and encryption
+//        let authInfo = try getAuthInitCommand()
+//        privateKey.append(contentsOf: authInfo.privateKey)
+//        publicKey.append(contentsOf: authInfo.publicKey)
+//        sharedSecret.append(contentsOf: authInfo.sharedSecret)
+//        
+//        let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
+//        
+//        if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+//            let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
+//            
+//            keyRespt.append(contentsOf: secretKeys.keyRespt)
+//            keyENC.append(contentsOf: secretKeys.keyENC)
+//            keyCMAC.append(contentsOf: secretKeys.keyCMAC)
+//            keyRMAC.append(contentsOf: secretKeys.keyRMAC)
+//            chainingValue.append(contentsOf: secretKeys.chainingValue)
+//        } else {
+//            throw SentrySDKError.secureChannelInitializationError
+//        }
         
         debugOutput += "------------------------------\n"
     }
@@ -141,7 +141,7 @@ final class BiometricsAPI {
         return dataArray
     }
     
-    func setVerifyStoredData(tag: NFCISO7816Tag) async throws {
+    func setVerifyStoredData(data: [UInt8], tag: NFCISO7816Tag) async throws {
         var debugOutput = "----- BiometricsAPI Set Verify Stored Data\n"
 
         defer {
@@ -150,7 +150,7 @@ final class BiometricsAPI {
         
         debugOutput += "     Setting verify stored data\n"
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        let command = APDUCommand.setVerifyAppletStoredData
+        let command = try APDUCommand.setVerifyAppletStoredData(data: data)
         try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data", to: tag)
         
 //        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
@@ -368,6 +368,25 @@ final class BiometricsAPI {
         
         debugOutput += "     Remaining: \(enrollmentStatus.remainingTouches)\n------------------------------\n"
         return enrollmentStatus.remainingTouches
+    }
+    
+    func verifyEnrolledFingerprintAndStoreData(data: [UInt8], tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Verify Enrolled Fingerprint And Store Data\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+
+        debugOutput += "     Verifying enrolled fingerprint\n"
+        try await verifyEnrolledFingerprint(tag: tag)
+        
+        debugOutput += "     Selecting Verify applet\n"
+        try await initializeVerify(tag: tag)
+        
+        debugOutput += "     Storing data\n"
+        try await setVerifyStoredData(data: data, tag: tag)
+        
+        debugOutput += "------------------------------\n"
     }
     
     /**
