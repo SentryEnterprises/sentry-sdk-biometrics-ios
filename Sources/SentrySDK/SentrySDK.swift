@@ -60,12 +60,13 @@ public class SentrySDK: NSObject {
      - Parameters:
         - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
+        - useSecureCommunication: Indicates if communication with the java card is encrypted (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
      */
-    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true) {
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
         self.enrollCode = enrollCode
-        biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput)
+        biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput, useSecureCommunication: useSecureCommunication)
     }
     
     

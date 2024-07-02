@@ -23,6 +23,7 @@ final class BiometricsAPI {
     
     // MARK: - Private Properties
     private let isDebugOutputVerbose: Bool
+    private let useSecureChannel: Bool
     
     // Note - This is reset when selecting a new applet (i.e. after initing the secure channel)
     private var encryptionCounter: [UInt8] = .init(repeating: 0, count: 16)
@@ -48,11 +49,13 @@ final class BiometricsAPI {
      
      - Parameters:
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
+        - useSecureCommunication: Indicates if communication with the java card is encrypted (defaults to `true`).
      
      - Returns: A newly instantiated `BiometricsAPI` object.
      */
-    init(verboseDebugOutput: Bool = true) {
+    init(verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
         isDebugOutputVerbose = verboseDebugOutput
+        useSecureChannel = useSecureCommunication
     }
     
     
@@ -87,60 +90,56 @@ final class BiometricsAPI {
         debugOutput += "     Selecting Enroll Applet\n"
         try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
         
-        // TODO: Note - not removing this just yet
-        //        let version = try await selectEnrollAndGetVersion(tag: tag)
-        //        if version.majorVersion < 2 {
-        //            // TODO: Throw
-        //            print("------------ USING AN UNSUPPORTED VERSION OF THE ENROLL APPLET!!! --------------")
-        //        }
-        
-        // use a secure channel, setup keys
-        debugOutput += "     Initializing Secure Channel\n"
-        
-        encryptionCounter = .init(repeating: 0, count: 16)
-        chainingValue.removeAll(keepingCapacity: true)
-        privateKey.removeAll(keepingCapacity: true)
-        publicKey.removeAll(keepingCapacity: true)
-        sharedSecret.removeAll(keepingCapacity: true)
-        keyRespt.removeAll(keepingCapacity: true)
-        keyENC.removeAll(keepingCapacity: true)
-        keyCMAC.removeAll(keepingCapacity: true)
-        keyRMAC.removeAll(keepingCapacity: true)
-        
-        // initialize the secure channel. this sets up keys and encryption
-        let authInfo = try getAuthInitCommand()
-        privateKey.append(contentsOf: authInfo.privateKey)
-        publicKey.append(contentsOf: authInfo.publicKey)
-        sharedSecret.append(contentsOf: authInfo.sharedSecret)
-        
-        let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
-        
-        if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
-            let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
+        // if using a secure channel, setup keys
+        if useSecureChannel {
+            debugOutput += "     Initializing Secure Channel\n"
             
-            keyRespt.append(contentsOf: secretKeys.keyRespt)
-            keyENC.append(contentsOf: secretKeys.keyENC)
-            keyCMAC.append(contentsOf: secretKeys.keyCMAC)
-            keyRMAC.append(contentsOf: secretKeys.keyRMAC)
-            chainingValue.append(contentsOf: secretKeys.chainingValue)
+            encryptionCounter = .init(repeating: 0, count: 16)
+            chainingValue.removeAll(keepingCapacity: true)
+            privateKey.removeAll(keepingCapacity: true)
+            publicKey.removeAll(keepingCapacity: true)
+            sharedSecret.removeAll(keepingCapacity: true)
+            keyRespt.removeAll(keepingCapacity: true)
+            keyENC.removeAll(keepingCapacity: true)
+            keyCMAC.removeAll(keepingCapacity: true)
+            keyRMAC.removeAll(keepingCapacity: true)
+            
+            // initialize the secure channel. this sets up keys and encryption
+            let authInfo = try getAuthInitCommand()
+            privateKey.append(contentsOf: authInfo.privateKey)
+            publicKey.append(contentsOf: authInfo.publicKey)
+            sharedSecret.append(contentsOf: authInfo.sharedSecret)
+            
+            do {
+                let securityInitResponse = try await sendAndConfirm(apduCommand: authInfo.apduCommand, name: "Auth Init", to: tag)
+                
+                if securityInitResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+                    let secretKeys = try calcSecretKeys(receivedPubKey: securityInitResponse.data.toArrayOfBytes(), sharedSecret: sharedSecret, privateKey: privateKey)
+                    
+                    keyRespt.append(contentsOf: secretKeys.keyRespt)
+                    keyENC.append(contentsOf: secretKeys.keyENC)
+                    keyCMAC.append(contentsOf: secretKeys.keyCMAC)
+                    keyRMAC.append(contentsOf: secretKeys.keyRMAC)
+                    chainingValue.append(contentsOf: secretKeys.chainingValue)
+                } else {
+                    throw SentrySDKError.secureChannelInitializationError
+                }
+            } catch SentrySDKError.apduCommandError(let errorCode) {
+                if errorCode == 0x6D00 {
+                    throw SentrySDKError.secureCommunicationNotSupported    // If we get an 'INS byte not supported', the enrollment applet doesn't support secure communication
+                } else {
+                    throw SentrySDKError.apduCommandError(errorCode)
+                }
+            }
+            
+            debugOutput += "     Verifing Enroll Code\n"
+            var enrollCodeCommand = try APDUCommand.verifyEnrollCode(code: enrollCode)
+            enrollCodeCommand = try wrapAPDUCommand(apduCommand: enrollCodeCommand, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            try await sendAndConfirm(apduCommand: enrollCodeCommand, name: "Verify Enroll Code", to: tag)
         } else {
-            throw SentrySDKError.secureChannelInitializationError
+            debugOutput += "     Verifing Enroll Code\n"
+            try await sendAndConfirm(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
         }
-        
-        debugOutput += "     Verifing Enroll Code\n"
-        var enrollCodeCommand = try APDUCommand.verifyEnrollCode(code: enrollCode)
-        enrollCodeCommand = try wrapAPDUCommand(apduCommand: enrollCodeCommand, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        //let returnData =
-        try await sendAndConfirm(apduCommand: enrollCodeCommand, name: "Verify Enroll Code", to: tag)
-  
-        // TODO: Note - not removing this just yet
-//        let verifyEnrollCodeResult = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
-//        
-//        print(verifyEnrollCodeResult)
-        
-//        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
-//            throw SentrySDKError.apduCommandError(returnData.statusWord)
-//        }
         
         debugOutput += "------------------------------\n"
     }
@@ -160,20 +159,27 @@ final class BiometricsAPI {
      */
     func getEnrollmentStatus(tag: NFCISO7816Tag) async throws -> BiometricEnrollmentStatus {
         var debugOutput = "----- BiometricsAPI Get Enrollment Status\n"
+        var dataArray: [UInt8] = []
 
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
         debugOutput += "     Getting enrollment status\n"
-        let enrollStatusCommand = try wrapAPDUCommand(apduCommand: APDUCommand.getEnrollStatus, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        let returnData = try await send(apduCommand: enrollStatusCommand, name: "Get Enroll Status", to: tag)
         
-        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
-            throw SentrySDKError.apduCommandError(returnData.statusWord)
+        if useSecureChannel {
+            let enrollStatusCommand = try wrapAPDUCommand(apduCommand: APDUCommand.getEnrollStatus, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            let returnData = try await send(apduCommand: enrollStatusCommand, name: "Get Enroll Status", to: tag)
+            
+            if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+                throw SentrySDKError.apduCommandError(returnData.statusWord)
+            }
+            
+            dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        } else {
+            let returnData = try await sendAndConfirm(apduCommand: APDUCommand.getEnrollStatus, name: "Get Enrollment Status", to: tag)
+            dataArray = returnData.data.toArrayOfBytes()
         }
-
-        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
         
         // sanity check - this buffer should be at least 40 bytes in length, possibly more
         if dataArray.count < 40 {
@@ -256,8 +262,12 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.processFingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Process Fingerprint", to: tag)
+        if useSecureChannel {
+            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.processFingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Process Fingerprint", to: tag)
+        } else {
+            try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint, name: "Process Fingerprint", to: tag)
+        }
         
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
@@ -283,9 +293,12 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        let verifyEnrollCommand = try wrapAPDUCommand(apduCommand: APDUCommand.verifyFingerprintEnrollment, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        
-        try await sendAndConfirm(apduCommand: verifyEnrollCommand, name: "Verify Enrolled Fingerprint", to: tag)
+        if useSecureChannel {
+            let verifyEnrollCommand = try wrapAPDUCommand(apduCommand: APDUCommand.verifyFingerprintEnrollment, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            try await sendAndConfirm(apduCommand: verifyEnrollCommand, name: "Verify Enrolled Fingerprint", to: tag)
+        } else {
+            try await sendAndConfirm(apduCommand: APDUCommand.verifyFingerprintEnrollment, name: "Verify Enrolled Fingerprint", to: tag)
+        }
         
         debugOutput += "------------------------------\n"
     }
@@ -496,22 +509,6 @@ final class BiometricsAPI {
     
     // MARK: - Private Methods
     
-    // TODO: Note - not removing this just yet
-//    private func selectEnrollAndGetVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
-//        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
-//        
-//        let responseBuffer = response.data.toArrayOfBytes()
-//        
-//        if responseBuffer.count < 16 {
-//            return VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
-//        } else {
-//            let string = String(bytes: responseBuffer, encoding: .ascii)            
-//            let majorVersion = Int(responseBuffer[13] - 0x30)
-//            let minorVersion = Int(responseBuffer[15] - 0x30)
-//            return VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
-//        }
-//    }
-    
     /// Encodes an APDU command.
     private func wrapAPDUCommand(apduCommand: [UInt8], keyENC: [UInt8], keyCMAC: [UInt8], chainingValue: inout [UInt8], encryptionCounter: inout [UInt8]) throws -> [UInt8] {
         let command = UnsafeMutablePointer<UInt8>.allocate(capacity: apduCommand.count)
@@ -637,7 +634,6 @@ final class BiometricsAPI {
             // TODO: Fix once we've converted security to pure Swift
             throw NSError(domain: "Unknown return value", code: -1)
         }
-        
 
         var result: [UInt8] = []
         for i in 0..<unwrappedLength.pointee {
@@ -658,36 +654,40 @@ final class BiometricsAPI {
     
     /// Initializes secure communication.
     private func getAuthInitCommand() throws -> AuthInitData {
-        let apduCommand = UnsafeMutablePointer<UInt8>.allocate(capacity: 89)
+        let apduCommand = UnsafeMutablePointer<UInt8>.allocate(capacity: 100)
+        let apduCommandLen = UnsafeMutablePointer<Int32>.allocate(capacity: 1)
         let privateKey = UnsafeMutablePointer<UInt8>.allocate(capacity: 32)
         let publicKey = UnsafeMutablePointer<UInt8>.allocate(capacity: 64)
         let secretShses = UnsafeMutablePointer<UInt8>.allocate(capacity: 32)
         defer {
             apduCommand.deallocate()
+            apduCommandLen.deallocate()
             privateKey.deallocate()
             publicKey.deallocate()
             secretShses.deallocate()
         }
         
-        let response = LibSecureChannelInit(apduCommand, privateKey, publicKey, secretShses)
+        let response = LibSecureChannelInit(apduCommand,apduCommandLen, privateKey, publicKey, secretShses)
         
-        // TODO: Fix; LibSecureChannelInit is returning a length, not a success value
-//        if response != SUCCESS {
-//            if response == ERROR_KEYGENERATION {
-//                throw SentrySDKError.keyGenerationError
-//            }
-//            if response == ERROR_SHAREDSECRETEXTRACTION {
-//                throw SentrySDKError.sharedSecretExtractionError
-//            }
-//        }
-        
+        if response != SUCCESS {
+            if response == ERROR_KEYGENERATION {
+                throw SentrySDKError.keyGenerationError
+            }
+            if response == ERROR_SHAREDSECRETEXTRACTION {
+                throw SentrySDKError.sharedSecretExtractionError
+            }
+            
+            // TODO: Fix once we've converted security to pure Swift
+            throw NSError(domain: "Unknown return value", code: -1)
+        }
+
         var command: [UInt8] = []
         var privKey: [UInt8] = []
         var pubKey: [UInt8] = []
         var sharedSecret: [UInt8] = []
         
-        for i in 0..<89 {
-            command.append(apduCommand.advanced(by: i).pointee)
+        for i in 0..<apduCommandLen.pointee {
+            command.append(apduCommand.advanced(by: Int(i)).pointee)
         }
         
         for i in 0..<32 {
