@@ -29,7 +29,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the version SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(majorVersion: 0, minorVersion: 3, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 4, hotfixVersion: 0, text: nil) }
     }
     
     /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
@@ -48,7 +48,7 @@ public class SentrySDK: NSObject {
                 result.append(pointer.advanced(by: i).pointee)
             }
             
-            return VersionInfo(majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
+            return VersionInfo(isInstalled: true, majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
         }
     }
     

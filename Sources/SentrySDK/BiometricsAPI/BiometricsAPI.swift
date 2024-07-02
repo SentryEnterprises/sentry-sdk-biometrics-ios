@@ -380,7 +380,7 @@ final class BiometricsAPI {
         p += 2
         let hotfix = dataBuffer[p] - 0x30
         
-        let retVal = VersionInfo(majorVersion: Int(major), minorVersion: Int(minor), hotfixVersion: Int(hotfix), text: nil)
+        let retVal = VersionInfo(isInstalled: true, majorVersion: Int(major), minorVersion: Int(minor), hotfixVersion: Int(hotfix), text: nil)
                 
         debugOutput += "     Card OS Version: \(retVal.majorVersion).\(retVal.minorVersion).\(retVal.hotfixVersion)\n------------------------------\n"
         return retVal
@@ -401,7 +401,7 @@ final class BiometricsAPI {
 
      */
     func getEnrollmentAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
-        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var version = VersionInfo(isInstalled: true, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
         var debugOutput = "----- BiometricsAPI Get Enrollment Applet Version\n"
         
         defer {
@@ -409,20 +409,29 @@ final class BiometricsAPI {
         }
          
         debugOutput += "     Selecting Enroll Applet\n"
-        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
         
-        let responseBuffer = response.data.toArrayOfBytes()
-        
-        if responseBuffer.count < 16 {
-            return VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
-        } else {
-            let string = String(bytes: responseBuffer, encoding: .ascii)
-            let majorVersion = Int(responseBuffer[13] - 0x30)
-            let minorVersion = Int(responseBuffer[15] - 0x30)
-            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+        do {
+            let response = try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
+            
+            let responseBuffer = response.data.toArrayOfBytes()
+            
+            if responseBuffer.count < 16 {
+                return VersionInfo(isInstalled: true, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else {
+                let string = String(bytes: responseBuffer, encoding: .ascii)
+                let majorVersion = Int(responseBuffer[13] - 0x30)
+                let minorVersion = Int(responseBuffer[15] - 0x30)
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+            }
+        } catch {
+            if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
+                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else {
+                throw error
+            }
         }
         
-        debugOutput += "     Enrollment Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+        debugOutput += "     Enrollment Applet Version: \(version.isInstalled) - \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
     }
     
@@ -441,26 +450,36 @@ final class BiometricsAPI {
 
      */
     func getCVMAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
-        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var version = VersionInfo(isInstalled: true, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
         var debugOutput = "----- BiometricsAPI Get CVM Applet Version\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
-         
+        
         debugOutput += "     Selecting CVM Applet\n"
-        let response = try await sendAndConfirm(apduCommand: APDUCommand.selectCVMApplet, name: "Select CVM Applet", to: tag)
         
-        let responseBuffer = response.data.toArrayOfBytes()
-        
-        if responseBuffer.count > 11 {
-            let string = String(bytes: responseBuffer, encoding: .ascii)
-            let majorVersion = Int(responseBuffer[10] - 0x30)
-            let minorVersion = Int(responseBuffer[12] - 0x30)
-            version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+        do {
+            let response = try await sendAndConfirm(apduCommand: APDUCommand.selectCVMApplet, name: "Select CVM Applet", to: tag)
+            
+            let responseBuffer = response.data.toArrayOfBytes()
+            
+            if responseBuffer.count > 11 {
+                let string = String(bytes: responseBuffer, encoding: .ascii)
+                let majorVersion = Int(responseBuffer[10] - 0x30)
+                let minorVersion = Int(responseBuffer[12] - 0x30)
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+            }
+        } catch {
+            if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
+                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else {
+                throw error
+            }
         }
 
-        debugOutput += "     CVM Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+
+        debugOutput += "     CVM Applet Version: \(version.isInstalled) - \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
     }
     
@@ -477,7 +496,7 @@ final class BiometricsAPI {
 
      */
     func getVerifyAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
-        var version = VersionInfo(majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        var version = VersionInfo(isInstalled: true, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
         var debugOutput = "----- BiometricsAPI Get Verify Applet Version\n"
         
         defer {
@@ -496,13 +515,17 @@ final class BiometricsAPI {
             if responseBuffer.count > 4 {
                 let majorVersion = Int(responseBuffer[3])
                 let minorVersion = Int(responseBuffer[4])
-                version = VersionInfo(majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
             }
-        } catch (let error) {
-            debugOutput += "     Unable to get Verify applet version: \(error)\n"
+        } catch {
+            if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
+                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else {
+                throw error
+            }
         }
 
-        debugOutput += "     Verify Applet Version: \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
+        debugOutput += "     Verify Applet Version: \(version.isInstalled) - \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
     }
     
