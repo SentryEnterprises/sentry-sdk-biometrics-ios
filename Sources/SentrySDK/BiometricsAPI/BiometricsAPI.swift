@@ -520,6 +520,13 @@ final class BiometricsAPI {
         } catch {
             if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
                 version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else if let sdkError = error as? SentrySDKError {
+                if case let SentrySDKError.apduCommandError(errorCode) = sdkError {
+                    if errorCode == 0x6D00 {
+                        version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+                    }
+                } else {
+                    throw error                }
             } else {
                 throw error
             }
