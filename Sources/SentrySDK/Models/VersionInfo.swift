@@ -11,6 +11,9 @@ import Foundation
  Contains version information.
  */
 public struct VersionInfo {
+    /// Indicates if the queried object is installed on the card
+    public let isInstalled: Bool
+    
     /// The major version number (increments on major functionality changes).
     public let majorVersion: Int
     

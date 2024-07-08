@@ -24,6 +24,9 @@ public enum SentrySDKError: Error {
     
     /// APDU specific error.
     case apduCommandError(Int)
+    
+    /// The applets on the java card do not appear to support secure communication.
+    case secureCommunicationNotSupported
         
     
     // The following errors should never occur, and indicate bugs in the code.

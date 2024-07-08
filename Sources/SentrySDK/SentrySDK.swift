@@ -34,7 +34,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the version SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(majorVersion: 0, minorVersion: 3, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 4, hotfixVersion: 1, text: nil) }
     }
     
     /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
@@ -53,7 +53,7 @@ public class SentrySDK: NSObject {
                 result.append(pointer.advanced(by: i).pointee)
             }
             
-            return VersionInfo(majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
+            return VersionInfo(isInstalled: true, majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
         }
     }
     
@@ -65,12 +65,13 @@ public class SentrySDK: NSObject {
      - Parameters:
         - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
+        - useSecureCommunication: Indicates if communication with the java card is encrypted (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
      */
-    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true) {
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
         self.enrollCode = enrollCode
-        biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput)
+        biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput, useSecureCommunication: useSecureCommunication)
     }
     
     
