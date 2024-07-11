@@ -21,19 +21,7 @@ enum APDUCommand {
     
     /// Selects the Verify applet (AID 4A4E45545F0102030405)
     static let selectVerifyApplet: [UInt8] = [0x00, 0xA4, 0x04, 0x00, 0x0A, 0x4A, 0x4E, 0x45, 0x54, 0x5F, 0x01, 0x02, 0x03, 0x04, 0x05, 0x00]
-    
-    // TODO: Note - not removing this just yet
-//    static let setPT1: [UInt8] = [0x80, 0xE2, 0x08, 0x00, 0x04, 0x90, 0x08, 0x01, 0x03]
-//    
-//    /// Resets enrollment.
-//    static let setEnroll: [UInt8] = [0x80, 0xE2, 0x08, 0x00, 0x04, 0x90, 0x13, 0x01, 0xCB]
-//    
-//    /// Sets enrollment retry count.
-//    static let setEnrollLimit: [UInt8] = [0x80, 0xE2, 0x08, 0x00, 0x04, 0x90, 0x15, 0x01, 0xFF]
-//    
-//    ///
-//    static let setStore: [UInt8] = [0x80, 0xE2, 0x88, 0x00, 0x00]
-    
+        
     /// Gets the enrollment status.
     static let getEnrollStatus: [UInt8] = [0x84, 0x59, 0x04, 0x00, 0x01, 0x00]
     
@@ -53,7 +41,7 @@ enum APDUCommand {
     static let getVerifyAppletVersion: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
     
     /// Retrieves the data stored in the Verify applet.
-    static let getVerifyAppletStoredData: [UInt8] = [0x80, 0xCA, 0x5F, 0xC2, 0x00]
+    static let getVerifyAppletStoredData: [UInt8] = [0x80, 0xCA, 0x5F, 0xC2, 0x00, 0x08, 0x00]      // Note: Always expects 2k bytes of data
 
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
@@ -72,11 +60,15 @@ enum APDUCommand {
         return setCodeCommand
     }
     
-    // TODO: Restrict this to 255 bytes
     /// Sets the data stored in the Verify applet.
     static func setVerifyAppletStoredData(data: [UInt8]) throws -> [UInt8] {
-        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xC2]
-        setVerifyAppletStoredData.append(UInt8(data.count))
+        if data.count > SentrySDKConstants.MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
+        }
+            
+        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xC2, 0x00]
+        setVerifyAppletStoredData.append(UInt8((data.count & 0xFF00) >> 8))
+        setVerifyAppletStoredData.append(UInt8(data.count & 0x00FF))
         setVerifyAppletStoredData.append(contentsOf: data)
         
         return setVerifyAppletStoredData
@@ -88,7 +80,7 @@ enum APDUCommand {
     /// Returns a padded buffer that contains the indicated enroll code digits.
     private static func constructCodeBuffer(code: [UInt8]) throws -> [UInt8] {
         var bufferIndex = 1
-        var codeBuffer: [UInt8] = [] // [0x80, 0x20, 0x00, 0x80, 0x08]
+        var codeBuffer: [UInt8] = []
         codeBuffer.append(0x20 + UInt8(code.count))
         codeBuffer.append(contentsOf: [0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF])
         

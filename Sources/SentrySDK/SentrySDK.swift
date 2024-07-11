@@ -9,11 +9,6 @@ import Foundation
 import CoreNFC
 import sentry_api_security
 
-public struct FingerprintValidationAndData {
-    public let doesFingerprintMatch: Bool
-    public let storedData: [UInt8]
-}
-
 /**
  Entry point for the `SentrySDK` functionality. Provides methods exposing all available functionality.
  
@@ -21,6 +16,8 @@ public struct FingerprintValidationAndData {
  */
 public class SentrySDK: NSObject {
     // MARK: - Private Properties
+    
+    // TODO: Parameterize so this can be localized
     private let cardCommunicationError = "An error occurred while communicating with the card."
     private let enrollCode: [UInt8]
     private let biometricsAPI: BiometricsAPI
@@ -30,11 +27,11 @@ public class SentrySDK: NSObject {
     private var callback: ((Result<NFCISO7816Tag, Error>) -> Void)?
     
     
-    // MARK: - Public Properties
+    // MARK: - Static Public Properties
     
     /// Returns the version SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 4, hotfixVersion: 1, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 5, hotfixVersion: 0, text: nil) }
     }
     
     /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
@@ -57,6 +54,7 @@ public class SentrySDK: NSObject {
         }
     }
     
+    
     // MARK: - Constructors
 
     /**
@@ -78,15 +76,13 @@ public class SentrySDK: NSObject {
     // MARK: - Public Methods
     
     /**
-     Retrieves version information for all necessary software installed on the scanned java card.
+     Retrieves version information for all necessary applets installed on the scanned java card.
      
      - Note: Applets prior to version 2.0 do not support this functionality and return -1 for all version values. This method is provided for debugging purposes.
      
      - Returns: A `CardVersionInfo` structure containing `VersionInfo` structures for the java card operating system and all required applets, if those applets are installed.
      */
     public func getCardSoftwareVersions() async throws -> CardVersionInfo {
-        print("=== GET CARD SOFTWARE VERSION")
-        
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -122,64 +118,6 @@ public class SentrySDK: NSObject {
         }
     }
     
-    public func getStoredData() async throws -> [UInt8]  {
-        print("=== GET STORED DATA")
-        
-        var errorDuringSession = false
-        defer {
-            // closes the NFC reader session
-            if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
-            } else {
-                session?.invalidate()
-            }
-        }
-
-        do {
-            // establish a connection
-            let isoTag = try await establishConnection()
-            
-            // initialize the Verify applet
-            try await biometricsAPI.initializeVerify(tag: isoTag)
-            
-            // get and return the stored data
-            let storedData = try await biometricsAPI.getVerifyStoredData(tag: isoTag)
-            return storedData
-        } catch (let error) {
-            errorDuringSession = true
-            throw error
-        }
-    }
-    
-    public func SetStoredData(data: [UInt8]) async throws {
-        print("=== SET STORED DATA")
-        
-        var errorDuringSession = false
-        defer {
-            // closes the NFC reader session
-            if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
-            } else {
-                session?.invalidate()
-            }
-        }
-
-        do {
-            // establish a connection
-            let isoTag = try await establishConnection()
-            
-            // initialize the Verify applet
-            try await biometricsAPI.initializeVerify(tag: isoTag)
-            
-            // get and return the stored data
-            try await biometricsAPI.setVerifyStoredData(data: data, tag: isoTag)
-        } catch (let error) {
-            errorDuringSession = true
-            throw error
-        }
-    }
-
-
     /**
      Retrieves the biometric fingerprint enrollment status.
      
@@ -196,8 +134,6 @@ public class SentrySDK: NSObject {
 
      */
     public func getEnrollmentStatus() async throws -> BiometricEnrollmentStatus  {
-        print("=== GET ENROLLMENT STATUS")
-        
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -243,8 +179,6 @@ public class SentrySDK: NSObject {
     
      */
     public func validateFingerprint() async throws -> FingerprintValidationAndData {
-        print("=== VALIDATE FINGERPRINT")
-        
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -298,8 +232,6 @@ public class SentrySDK: NSObject {
     
      */
     public func enrollFingerprint(dataToStore: [UInt8], connected: (Bool) -> Void, stepFinished: (_ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
-        print("=== ENROLL BIOMETRIC")
-        
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -368,8 +300,6 @@ public class SentrySDK: NSObject {
 
      */
     public func resetCard() async throws {
-        print("=== RESET CARD")
-        
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -392,6 +322,74 @@ public class SentrySDK: NSObject {
         }
     }
 
+    
+    // MARK: - Unfinished Functionality
+    
+    /* The methods that follow are a 'work-in-progress' and as such are subject to change in the next version */
+    
+    /**
+     VOLATILE - SUBJECT TO CHANGE
+     
+     Retrieves data stored on the card.
+     */
+    public func getStoredData() async throws -> [UInt8]  {
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Verify applet
+            try await biometricsAPI.initializeVerify(tag: isoTag)
+            
+            // get and return the stored data
+            let storedData = try await biometricsAPI.getVerifyStoredData(tag: isoTag)
+            return storedData
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
+    
+    /**
+     VOLATILE - SUBJECT TO CHANGE
+     
+     Stores data on the card.
+     */
+    public func setStoredData(data: [UInt8]) async throws {
+        var errorDuringSession = false
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationError)
+            } else {
+                session?.invalidate()
+            }
+        }
+
+        do {
+            // establish a connection
+            let isoTag = try await establishConnection()
+            
+            // initialize the Verify applet
+            try await biometricsAPI.initializeVerify(tag: isoTag)
+            
+            // get and return the stored data
+            try await biometricsAPI.setVerifyStoredData(data: data, tag: isoTag)
+        } catch (let error) {
+            errorDuringSession = true
+            throw error
+        }
+    }
+    
     
     // MARK: - Private Methods
 
@@ -425,11 +423,17 @@ public class SentrySDK: NSObject {
 
             // start the NFC reader session
             session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self)
+            
+            // TODO: Parameterize so this can be localized
             session?.alertMessage = "Place your card under the top of the phone to establish connection."
             session?.begin()
         }
     }
 
+    
+    
+    // TODO: Move these two methods outside of the SDK such that callers can change the NFC dialog themselves
+    
     /// Animates an update to the progress text displayed in the NFC session UI.
     private func updateProgress(oldProgress: UInt8, newProgress: UInt8) -> UInt8 {
         let diff = newProgress - oldProgress

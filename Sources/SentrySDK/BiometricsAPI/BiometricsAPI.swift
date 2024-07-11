@@ -126,20 +126,6 @@ final class BiometricsAPI {
 //        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
         let dataArray = returnData.data.toArrayOfBytes()
         
-        // sanity check - this buffer should be at least 40 bytes in length, possibly more
-//        if dataArray.count < 40 {
-//            throw SentrySDKError.enrollmentStatusBufferTooSmall
-//        }
-        
-//        // extract values from specific index in the array
-//        let maxNumberOfFingers = dataArray[31]
-//        let enrolledTouches = dataArray[32]
-//        let remainingTouches = dataArray[33]
-//        let mode = dataArray[39]
-//        
-//        debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     Enrolled Touches: \(enrolledTouches)\n     Remaining Touches: \(remainingTouches)\n     Mode: \(mode)\n"
-
-        
         debugOutput += "------------------------------\n"
         return dataArray
     }
@@ -347,7 +333,7 @@ final class BiometricsAPI {
      */
     func getFingerprintVerification(tag: NFCISO7816Tag) async throws -> Bool {
         
-        // TODO: !!! This needs to use the special applet, and implement encryption !!!
+        // TODO: !!! This needs to use the Verify applet, and implement encryption !!!
         
         var debugOutput = "----- BiometricsAPI Get Fingerprint Verification\n"
         

@@ -27,6 +27,9 @@ public enum SentrySDKError: Error {
     
     /// The applets on the java card do not appear to support secure communication.
     case secureCommunicationNotSupported
+    
+    /// The amount of data the system attempted to store on the java card was too big (maximum size supported is 2048 bytes).
+    case dataSizeNotSupported
         
     
     // The following errors should never occur, and indicate bugs in the code.

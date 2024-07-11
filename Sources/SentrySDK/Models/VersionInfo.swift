@@ -1,8 +1,8 @@
 //
 //  VersionInfo.swift
+//  SentrySDK
 //
-//
-//  Created by John Ayres on 6/19/24.
+//  Copyright © 2024 Sentry Enterprises
 //
 
 import Foundation
