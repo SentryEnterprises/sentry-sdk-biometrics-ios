@@ -13,12 +13,12 @@ import sentry_api_security
  Entry point for the `SentrySDK` functionality. Provides methods exposing all available functionality.
  
  This class controls and manages an `NFCReaderSession` to communicate with an `NFCISO7816Tag` via `APDU` commands.
+ 
+ The bioverify.cap, com.idex.enroll.cap, and com.jnet.CDCVM.cap applets must be installed on the java card for full access to all functionality of this SDK.
  */
 public class SentrySDK: NSObject {
     // MARK: - Private Properties
     
-    // TODO: Parameterize so this can be localized
-    private let cardCommunicationError = "An error occurred while communicating with the card."
     private let enrollCode: [UInt8]
     private let biometricsAPI: BiometricsAPI
 
@@ -27,9 +27,15 @@ public class SentrySDK: NSObject {
     private var callback: ((Result<NFCISO7816Tag, Error>) -> Void)?
     
     
+    // MARK: - Public Properties
+    
+    /// Gets or sets the text displayed in the NFC scanning UI when an error occurs while communicating with the java card.
+    public var cardCommunicationErrorText = "An error occurred while communicating with the card."
+    
+    
     // MARK: - Static Public Properties
     
-    /// Returns the version SDK version (read-only)
+    /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
         get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 5, hotfixVersion: 0, text: nil) }
     }
@@ -60,6 +66,8 @@ public class SentrySDK: NSObject {
     /**
      Creates a new instance of `SentrySDK`.
      
+     - Note: The indicated `enrollCode` MUST be the same code used when the com.idex.enroll.cap applet was installed on the java card. See the installation script for the java card to retrieve the enroll code.
+     
      - Parameters:
         - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
@@ -87,7 +95,7 @@ public class SentrySDK: NSObject {
         defer {
             // closes the NFC reader session
             if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
                 session?.invalidate()
             }
@@ -138,7 +146,7 @@ public class SentrySDK: NSObject {
         defer {
             // closes the NFC reader session
             if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
                 session?.invalidate()
             }
@@ -161,14 +169,15 @@ public class SentrySDK: NSObject {
     }
     
     /**
-     Validates that the finger on the fingerprint sensor matches (or does not match) a fingerprint recorded during enrollment.
+     Validates that the finger on the fingerprint sensor matches (or does not match) a fingerprint recorded during enrollment. If the fingerprint matches, this returns any data that was
+     previously stored during the enrollment process.
      
      Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
      
      This process waits up to five (5) seconds for a finger to be pressed against the sensor. This timeout is (currently) not configurable. If a finger is not detected on the sensor within the
      timeout period, a `SentrySDKError.apduCommandError` is thrown, indicating either a user timeout expiration (0x6748) or a host interface timeout expiration (0x6749).
      
-     - Returns:`True` if the scanned fingerprint matches one recorded during enrollment, otherwise returns `false`.
+     - Returns: A `FingerprintValidatoinAndData` structure. The `doesFingerprintMatch` property is `true` if the scanned fingerprint matches the one recorded during enrollment, otherwise this property is `false`. The `storedData` property contains the data stored during the enrollment process only when `doesFingerprintMatch` is `true`.
      
      This method can throw the following exceptions:
      * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
@@ -183,7 +192,7 @@ public class SentrySDK: NSObject {
         defer {
             // closes the NFC reader session
             if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
                 session?.invalidate()
             }
@@ -220,6 +229,7 @@ public class SentrySDK: NSObject {
      - Note: Assumes that the Enroll applet only supports a single finger for enrollment.
      
      - Parameters:
+        - dataToStore: An array of `UInt8` containing up to 2048 bytes of data to store on the java card.
         - connected: A callback method that receives a boolean value. This is called with `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
         - stepFinished: A callback method that receives the current enrollment scan step that just finished, and the total number of steps required (i.e. scan two (2) out of the six (6) required). Callers should use this to update UI indicating the percentage completed.
      
@@ -228,18 +238,24 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
+     * `SentrySDKError.dataSizeNotSupported` if the `dataToStore` array size is > 2048 bytes.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func enrollFingerprint(dataToStore: [UInt8], connected: (Bool) -> Void, stepFinished: (_ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
+    public func enrollFingerprint(dataToStore: [UInt8], connected: (Bool) -> Void, stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
             if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
                 session?.invalidate()
             }
+        }
+        
+        // throw an error if the caller is passing more than the allowed maximum size of stored data
+        if dataToStore.count > SentrySDKConstants.MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
         }
         
         do {
@@ -256,26 +272,20 @@ public class SentrySDK: NSObject {
             
             // calculate the required number of steps and update the NFC reader session UI
             let maximumSteps = enrollStatus.enrolledTouches + enrollStatus.remainingTouches
-            var progress = updateProgress(oldProgress: 0, newProgress: 0)
             var enrollmentsLeft = maximumSteps
             
             while enrollmentsLeft > 0 {
                 // scan the finger currently on the sensor
                 let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
                 if remainingEnrollments <= 0 {
-                    //try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
                     try await biometricsAPI.verifyEnrolledFingerprintAndStoreData(data: dataToStore, tag: isoTag)
                 }
                 enrollmentsLeft = remainingEnrollments
                                 
-                // update the NFC session UI with the current progress percentage
-                let currentStep = maximumSteps - enrollmentsLeft
-                let currentStepDouble = Double(currentStep)
-                let maximumStepsDouble = Double(maximumSteps)
-                progress = updateProgress(oldProgress: progress, newProgress: UInt8(currentStepDouble / maximumStepsDouble * 100))
-                
                 // inform the caller of the step that just finished
-                stepFinished(currentStep, maximumSteps)
+                if let session = session {
+                    stepFinished(session, maximumSteps - enrollmentsLeft, maximumSteps)
+                }
             }
         } catch (let error) {
             errorDuringSession = true
@@ -304,7 +314,7 @@ public class SentrySDK: NSObject {
         defer {
             // closes the NFC reader session
             if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
                 session?.invalidate()
             }
@@ -322,74 +332,6 @@ public class SentrySDK: NSObject {
         }
     }
 
-    
-    // MARK: - Unfinished Functionality
-    
-    /* The methods that follow are a 'work-in-progress' and as such are subject to change in the next version */
-    
-    /**
-     VOLATILE - SUBJECT TO CHANGE
-     
-     Retrieves data stored on the card.
-     */
-    public func getStoredData() async throws -> [UInt8]  {
-        var errorDuringSession = false
-        defer {
-            // closes the NFC reader session
-            if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
-            } else {
-                session?.invalidate()
-            }
-        }
-
-        do {
-            // establish a connection
-            let isoTag = try await establishConnection()
-            
-            // initialize the Verify applet
-            try await biometricsAPI.initializeVerify(tag: isoTag)
-            
-            // get and return the stored data
-            let storedData = try await biometricsAPI.getVerifyStoredData(tag: isoTag)
-            return storedData
-        } catch (let error) {
-            errorDuringSession = true
-            throw error
-        }
-    }
-    
-    /**
-     VOLATILE - SUBJECT TO CHANGE
-     
-     Stores data on the card.
-     */
-    public func setStoredData(data: [UInt8]) async throws {
-        var errorDuringSession = false
-        defer {
-            // closes the NFC reader session
-            if errorDuringSession {
-                session?.invalidate(errorMessage: cardCommunicationError)
-            } else {
-                session?.invalidate()
-            }
-        }
-
-        do {
-            // establish a connection
-            let isoTag = try await establishConnection()
-            
-            // initialize the Verify applet
-            try await biometricsAPI.initializeVerify(tag: isoTag)
-            
-            // get and return the stored data
-            try await biometricsAPI.setVerifyStoredData(data: data, tag: isoTag)
-        } catch (let error) {
-            errorDuringSession = true
-            throw error
-        }
-    }
-    
     
     // MARK: - Private Methods
 
@@ -427,43 +369,6 @@ public class SentrySDK: NSObject {
             // TODO: Parameterize so this can be localized
             session?.alertMessage = "Place your card under the top of the phone to establish connection."
             session?.begin()
-        }
-    }
-
-    
-    
-    // TODO: Move these two methods outside of the SDK such that callers can change the NFC dialog themselves
-    
-    /// Animates an update to the progress text displayed in the NFC session UI.
-    private func updateProgress(oldProgress: UInt8, newProgress: UInt8) -> UInt8 {
-        let diff = newProgress - oldProgress
-       
-        // if no progress has been made, simply set the alert message and return
-        guard diff > 0 else {
-            session?.alertMessage = getText(percentValue: oldProgress.description)
-            return newProgress
-        }
-        
-        let duration = 0.3 // Total animation duration in seconds
-        let updateInterval = duration / Double(diff)
-        
-        // just a simple trick to animate the percentage text change
-        var currentValue = oldProgress
-        while currentValue <= newProgress {
-            session?.alertMessage = getText(percentValue: currentValue.description)
-            Thread.sleep(forTimeInterval: updateInterval)
-            currentValue += 1
-        }
-        
-        return newProgress
-    }
-    
-    /// Returns different text dependent on the percent value.
-    private func getText(percentValue: String) -> String {
-        if percentValue == "0" {
-            return "Place and lift your thumb at different angles on your card’s sensor."
-        } else {
-            return "Scanning \(percentValue)%"
         }
     }
 }
