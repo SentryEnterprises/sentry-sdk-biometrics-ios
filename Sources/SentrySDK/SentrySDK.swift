@@ -242,7 +242,9 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func enrollFingerprint(dataToStore: [UInt8], connected: (Bool) -> Void, stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
+    public func enrollFingerprint(dataToStore: [UInt8],
+                                  connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void,
+                                  stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -262,7 +264,9 @@ public class SentrySDK: NSObject {
             // establish a connection
             let isoTag: NFCISO7816Tag
             isoTag = try await establishConnection()
-            connected(true)
+            if let session = session {
+                connected(session, true)
+            }
             
             // initialize the Enroll applet
             try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
@@ -289,7 +293,9 @@ public class SentrySDK: NSObject {
             }
         } catch (let error) {
             errorDuringSession = true
-            connected(false)
+            if let session = session {
+                connected(session, false)
+            }
             throw error
         }
     }
