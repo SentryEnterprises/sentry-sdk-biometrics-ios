@@ -205,7 +205,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
+            try await biometricsAPI.initializeVerify(tag: isoTag)
             
             // perform a biometric fingerprint verification
             //let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
