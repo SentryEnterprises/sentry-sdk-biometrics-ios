@@ -644,9 +644,9 @@ final class BiometricsAPI {
             
             let responseBuffer = response.data.toArrayOfBytes()
             
-            if responseBuffer.count > 4 {
-                let majorVersion = Int(responseBuffer[3])
-                let minorVersion = Int(responseBuffer[4])
+            if responseBuffer.count == 4 {
+                let majorVersion = Int(responseBuffer[2])
+                let minorVersion = Int(responseBuffer[3])
                 version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
             }
         } catch {
