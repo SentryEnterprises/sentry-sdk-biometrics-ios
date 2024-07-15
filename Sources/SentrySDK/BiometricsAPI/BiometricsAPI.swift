@@ -352,7 +352,7 @@ final class BiometricsAPI {
                 throw SentrySDKError.cvmAppletBlocked
             }
             
-            if returnData.data[4] == 0x5A {
+            if returnData.data[4] == 0xA5 {
                 debugOutput += "     Match\n------------------------------\n"
                 return true
             } else {
