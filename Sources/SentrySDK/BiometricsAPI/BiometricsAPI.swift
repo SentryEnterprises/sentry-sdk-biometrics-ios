@@ -69,7 +69,7 @@ final class BiometricsAPI {
         }
         
         debugOutput += "     Selecting Verify Applet\n"
-        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select", to: tag)
+        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
         
 //        // use a secure channel, setup keys
 //        debugOutput += "     Initializing Secure Channel\n"
@@ -178,7 +178,7 @@ final class BiometricsAPI {
         }
         
         debugOutput += "     Selecting Enroll Applet\n"
-        try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select", to: tag)
+        try await sendAndConfirm(apduCommand: APDUCommand.selectEnrollApplet, name: "Select Enroll Applet", to: tag)
         
         // if using a secure channel, setup keys
         if useSecureChannel {
@@ -618,7 +618,6 @@ final class BiometricsAPI {
             }
         }
 
-
         debugOutput += "     CVM Applet Version: \(version.isInstalled) - \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
     }
@@ -636,54 +635,43 @@ final class BiometricsAPI {
 
      */
     func getVerifyAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
-        var version = VersionInfo(isInstalled: true, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        // Note: Due to the way Apple implemented APDU communication, it's possible to send a select command and receive a 9000 response
+        // even though the applet isn't actually installed on the card. The BioVerify applet has always supported a versioning command,
+        // so here we'll simply check if the command was processes, and if we get an 'instruction byte not supported' response, we assume
+        // the BioVerify applet isn't installed.
+        
+        var version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
         var debugOutput = "----- BiometricsAPI Get Verify Applet Version\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
-         
+        
         debugOutput += "     Selecting Verify Applet\n"
         
-        // the Verify applet may not be there, so we'll assume any exceptions thrown here are a result of the app missing from the card
-        do {
-            let selectResponse = try await send(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+        try await send(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+        let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
+        
+        if response.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+            let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
             
-            if selectResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
-                let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
-                
-                let responseBuffer = response.data.toArrayOfBytes()
-                
-                if responseBuffer.count == 4 {
-                    let majorVersion = Int(responseBuffer[2])
-                    let minorVersion = Int(responseBuffer[3])
-                    version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
-                } else if responseBuffer.count == 2 {
-                    let majorVersion = Int(responseBuffer[0])
-                    let minorVersion = Int(responseBuffer[1])
-                    version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
-                }
-            } else if selectResponse.statusWord == APDUResponseCode.instructionByteNotSupported.rawValue {
-                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
-            } else {
-                throw SentrySDKError.apduCommandError(selectResponse.statusWord)
+            let responseBuffer = response.data.toArrayOfBytes()
+            
+            if responseBuffer.count == 4 {
+                let majorVersion = Int(responseBuffer[2])
+                let minorVersion = Int(responseBuffer[3])
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+            } else if responseBuffer.count == 2 {
+                let majorVersion = Int(responseBuffer[0])
+                let minorVersion = Int(responseBuffer[1])
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
             }
-        } catch {
-            if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
-                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
-            } else if let sdkError = error as? SentrySDKError {
-                if case let SentrySDKError.apduCommandError(errorCode) = sdkError {
-                    if errorCode == 0x6D00 {
-                        version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
-                    }
-                } else {
-                    throw error
-                }
-            } else {
-                throw error
-            }
+        } else if response.statusWord == APDUResponseCode.instructionByteNotSupported.rawValue {
+            version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+        } else {
+            throw SentrySDKError.apduCommandError(response.statusWord)
         }
-
+        
         debugOutput += "     Verify Applet Version: \(version.isInstalled) - \(version.majorVersion).\(version.minorVersion).\(version.hotfixVersion)\n------------------------------\n"
         return version
     }

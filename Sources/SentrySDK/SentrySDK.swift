@@ -100,7 +100,7 @@ public class SentrySDK: NSObject {
                 session?.invalidate()
             }
         }
-
+        
         do {
             // establish a connection
             let isoTag = try await establishConnection()
@@ -110,14 +110,14 @@ public class SentrySDK: NSObject {
             print("OS: \(osVersion)")
             
             // get applet version
+            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
+            print("Verify: \(verifyVersion)")
+
             let enrollVersion = try await biometricsAPI.getEnrollmentAppletVersion(tag: isoTag)
             print("Enroll: \(enrollVersion)")
             
             let cvmVersion = try await biometricsAPI.getCVMAppletVersion(tag: isoTag)
             print("CVM: \(cvmVersion)")
-            
-            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
-            print("Verify: \(verifyVersion)")
             
             return CardVersionInfo(osVersion: osVersion, enrollAppletVersion: enrollVersion, cvmAppletVersion: cvmVersion, verifyAppletVersion: verifyVersion)
         } catch (let error) {
@@ -265,16 +265,16 @@ public class SentrySDK: NSObject {
         
         do {
             // establish a connection
-            let isoTag: NFCISO7816Tag
-            isoTag = try await establishConnection()
-            if let session = session {
-                connected(session, true)
-            }
+            let isoTag = try await establishConnection()
             
             // make sure the Verify applet is installed or we cannot store data
             let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
             if !verifyVersion.isInstalled {
                 throw SentrySDKError.bioverifyAppletNotInstalled
+            }
+            
+            if let session = session {
+                connected(session, true)
             }
             
             // initialize the Enroll applet
