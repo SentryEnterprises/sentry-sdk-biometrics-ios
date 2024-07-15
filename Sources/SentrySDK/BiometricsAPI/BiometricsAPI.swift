@@ -647,19 +647,26 @@ final class BiometricsAPI {
         
         // the Verify applet may not be there, so we'll assume any exceptions thrown here are a result of the app missing from the card
         do {
-            try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
-            let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
+            let selectResponse = try await send(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
             
-            let responseBuffer = response.data.toArrayOfBytes()
-            
-            if responseBuffer.count == 4 {
-                let majorVersion = Int(responseBuffer[2])
-                let minorVersion = Int(responseBuffer[3])
-                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
-            } else if responseBuffer.count == 2 {
-                let majorVersion = Int(responseBuffer[0])
-                let minorVersion = Int(responseBuffer[1])
-                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+            if selectResponse.statusWord == APDUResponseCode.operationSuccessful.rawValue {
+                let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
+                
+                let responseBuffer = response.data.toArrayOfBytes()
+                
+                if responseBuffer.count == 4 {
+                    let majorVersion = Int(responseBuffer[2])
+                    let minorVersion = Int(responseBuffer[3])
+                    version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+                } else if responseBuffer.count == 2 {
+                    let majorVersion = Int(responseBuffer[0])
+                    let minorVersion = Int(responseBuffer[1])
+                    version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+                }
+            } else if selectResponse.statusWord == APDUResponseCode.instructionByteNotSupported.rawValue {
+                version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
+            } else {
+                throw SentrySDKError.apduCommandError(selectResponse.statusWord)
             }
         } catch {
             if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
