@@ -333,7 +333,7 @@ final class BiometricsAPI {
      */
     func getFingerprintVerification(tag: NFCISO7816Tag) async throws -> Bool {
         
-        // TODO: !!! This needs to use the Verify applet, and implement encryption !!!
+        // TODO: !!! implement encryption !!!
         
         var debugOutput = "----- BiometricsAPI Get Fingerprint Verification\n"
         
@@ -344,15 +344,23 @@ final class BiometricsAPI {
         let returnData = try await send(apduCommand: APDUCommand.getFingerprintVerify, name: "Fingerprint Verification", to: tag)
         
         if returnData.statusWord == APDUResponseCode.operationSuccessful.rawValue {
-            debugOutput += "     Match\n------------------------------\n"
-            return true
+            if returnData.data[3] == 0x00 {
+                throw SentrySDKError.cvmAppletNotAvailable
+            }
+            
+            if returnData.data[5] == 0x01 {
+                throw SentrySDKError.cvmAppletBlocked
+            }
+            
+            if returnData.data[4] == 0x5A {
+                debugOutput += "     Match\n------------------------------\n"
+                return true
+            } else {
+                debugOutput += "     No match found\n------------------------------\n"
+                return false
+            }
         }
-        
-        if returnData.statusWord == APDUResponseCode.noMatchFound.rawValue {
-            debugOutput += "     No match found\n------------------------------\n"
-            return false
-        }
-        
+
         throw SentrySDKError.apduCommandError(returnData.statusWord)
     }
 
@@ -648,6 +656,10 @@ final class BiometricsAPI {
                 let majorVersion = Int(responseBuffer[2])
                 let minorVersion = Int(responseBuffer[3])
                 version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+            } else if responseBuffer.count == 2 {
+                let majorVersion = Int(responseBuffer[0])
+                let minorVersion = Int(responseBuffer[1])
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
             }
         } catch {
             if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
@@ -658,7 +670,8 @@ final class BiometricsAPI {
                         version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
                     }
                 } else {
-                    throw error                }
+                    throw error
+                }
             } else {
                 throw error
             }

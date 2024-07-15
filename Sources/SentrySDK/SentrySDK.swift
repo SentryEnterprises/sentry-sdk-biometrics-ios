@@ -184,6 +184,8 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
+     * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet on the java card could not be initialized.
+     * `SentrySDKError.cvmAppletBlocked` if the CVM applet on the java card is blocked (likely requiring a full card reset).
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
@@ -239,6 +241,7 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `SentrySDKError.dataSizeNotSupported` if the `dataToStore` array size is > 2048 bytes.
+     * `SentrySDKError.bioverifyAppletNotInstalled` if the BioVerify applet is not installed on the java card.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
@@ -266,6 +269,12 @@ public class SentrySDK: NSObject {
             isoTag = try await establishConnection()
             if let session = session {
                 connected(session, true)
+            }
+            
+            // make sure the Verify applet is installed or we cannot store data
+            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
+            if !verifyVersion.isInstalled {
+                throw SentrySDKError.bioverifyAppletNotInstalled
             }
             
             // initialize the Enroll applet

@@ -30,6 +30,15 @@ public enum SentrySDKError: Error {
     
     /// The amount of data the system attempted to store on the java card was too big (maximum size supported is 2048 bytes).
     case dataSizeNotSupported
+    
+    /// The CVM applet on the card was unavailable.
+    case cvmAppletNotAvailable
+    
+    /// The CVM applet on the card is blocked, and the card will need a reset.
+    case cvmAppletBlocked
+    
+    /// The BioVerify applet is not installed on the java card.
+    case bioverifyAppletNotInstalled
         
     
     // The following errors should never occur, and indicate bugs in the code.

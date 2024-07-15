@@ -26,7 +26,7 @@ enum APDUCommand {
     static let getEnrollStatus: [UInt8] = [0x84, 0x59, 0x04, 0x00, 0x01, 0x00]
     
     /// Verifies that the finger on the sensor matches the one recorded during enrollment.
-    static let getFingerprintVerify: [UInt8] = [0xED, 0x56, 0x00, 0x00, 0x01, 0x00]
+    static let getFingerprintVerify: [UInt8] = [0x80, 0xB6, 0x01, 0x00, 0x00]
     
     /// Enrolls a fingerprint.
     static let processFingerprint: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x00, 0x01] // note: the last byte indicates the finger number; this will need updating if/when 2 fingers are supported
