@@ -653,11 +653,13 @@ final class BiometricsAPI {
         let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
         
         if response.statusWord == APDUResponseCode.operationSuccessful.rawValue {
-            let response = try await send(apduCommand: APDUCommand.getVerifyAppletVersion, name: "Get Verify Applet Version", to: tag)
-            
             let responseBuffer = response.data.toArrayOfBytes()
             
-            if responseBuffer.count == 4 {
+            if responseBuffer.count == 5 {
+                let majorVersion = Int(responseBuffer[3])
+                let minorVersion = Int(responseBuffer[4])
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
+            } else if responseBuffer.count == 4 {
                 let majorVersion = Int(responseBuffer[2])
                 let minorVersion = Int(responseBuffer[3])
                 version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: nil)
