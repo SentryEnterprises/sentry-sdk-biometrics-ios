@@ -242,6 +242,7 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `SentrySDKError.dataSizeNotSupported` if the `dataToStore` array size is > 2048 bytes.
      * `SentrySDKError.bioverifyAppletNotInstalled` if the BioVerify applet is not installed on the java card.
+     * `SentrySDKError.enrollModeNotAvailable` if the java card is already enrolled and is in verification state.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
@@ -282,6 +283,11 @@ public class SentrySDK: NSObject {
             
             // get the current enrollment status
             let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
+            
+            // if this card is in verification mode, we cannot enroll fingerprints
+            if enrollStatus.mode == .verification {
+                throw SentrySDKError.enrollModeNotAvailable
+            }
             
             // calculate the required number of steps and update the NFC reader session UI
             let maximumSteps = enrollStatus.enrolledTouches + enrollStatus.remainingTouches

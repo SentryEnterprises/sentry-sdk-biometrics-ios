@@ -39,6 +39,9 @@ public enum SentrySDKError: Error {
     
     /// The BioVerify applet is not installed on the java card.
     case bioverifyAppletNotInstalled
+    
+    /// Indicates that the java card is already enrolled and is in verification state.
+    case enrollModeNotAvailable
         
     
     // The following errors should never occur, and indicate bugs in the code.
