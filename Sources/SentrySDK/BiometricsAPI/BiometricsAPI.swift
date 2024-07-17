@@ -155,8 +155,8 @@ final class BiometricsAPI {
         var command: [UInt8]
 
         switch dataSlot {
-        case .small: command = APDUCommand.getVerifyAppletStoredDataSmallSecured
-        case .huge: command = APDUCommand.getVerifyAppletStoredDataHugeSecured
+        case .small: command = try APDUCommand.setVerifyAppletStoredDataSmallSecure(data: data)
+        case .huge:  command = try APDUCommand.setVerifyAppletStoredDataLargeSecure(data: data)
         }
         
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
