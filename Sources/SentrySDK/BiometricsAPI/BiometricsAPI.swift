@@ -9,6 +9,11 @@ import Foundation
 import CoreNFC
 import sentry_api_security
 
+public enum DataSlot {
+    case small
+    case huge
+}
+
 /**
  Communicates with the IDEX Enroll applet by sending various `APDU` commands in the appropriate order.
  
@@ -107,17 +112,24 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
     }
     
-    func getVerifyStoredData(tag: NFCISO7816Tag) async throws -> [UInt8] {
-        var debugOutput = "----- BiometricsAPI Get Verify Stored Data\n"
+    func getVerifyStoredDataSecure(tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> [UInt8] {
+        var debugOutput = "----- BiometricsAPI Get Verify Stored Data Secure, slot: \(dataSlot)\n"
 
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        debugOutput += "     Getting verify stored data\n"
+        debugOutput += "     Getting verify stored data Secure\n"
+        var command: [UInt8]
+        
+        switch dataSlot {
+        case .small: command = APDUCommand.getVerifyAppletStoredDataSmallSecured
+        case .huge: command = APDUCommand.getVerifyAppletStoredDataHugeSecured
+        }
+        
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        let command = APDUCommand.getVerifyAppletStoredData
-        let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data", to: tag)
+        
+        let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data Secure", to: tag)
         
         if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
             throw SentrySDKError.apduCommandError(returnData.statusWord)
@@ -130,17 +142,69 @@ final class BiometricsAPI {
         return dataArray
     }
     
-    func setVerifyStoredData(data: [UInt8], tag: NFCISO7816Tag) async throws {
-        var debugOutput = "----- BiometricsAPI Set Verify Stored Data\n"
+    func setVerifyStoredDataSecure(data: [UInt8], tag: NFCISO7816Tag, dataSlot: DataSlot) async throws {
+        var debugOutput = "----- BiometricsAPI Set Verify Stored Data Secure, slot: \(dataSlot)\n"
 
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        debugOutput += "     Setting verify stored data\n"
+        debugOutput += "     Setting verify stored data Secure\n"
+        var command: [UInt8]
+
+        switch dataSlot {
+        case .small: command = APDUCommand.getVerifyAppletStoredDataSmallSecured
+        case .huge: command = APDUCommand.getVerifyAppletStoredDataHugeSecured
+        }
+        
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        let command = try APDUCommand.setVerifyAppletStoredData(data: data)
-        try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data", to: tag)
+        try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data Secure", to: tag)
+        
+//        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+//            throw SentrySDKError.apduCommandError(returnData.statusWord)
+//        }
+//
+//        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        
+        debugOutput += "------------------------------\n"
+    }
+
+    func getVerifyStoredDataUnsecure(tag: NFCISO7816Tag) async throws -> [UInt8] {
+        var debugOutput = "----- BiometricsAPI Get Verify Stored Data Unsecure\n"
+
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Getting verify stored data unsecure\n"
+        let command = APDUCommand.getVerifyAppletStoredDataSmallUnsecured
+        //let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        
+        let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data Unsecure", to: tag)
+        
+        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+            throw SentrySDKError.apduCommandError(returnData.statusWord)
+        }
+
+//        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        let dataArray = returnData.data.toArrayOfBytes()
+        
+        debugOutput += "------------------------------\n"
+        return dataArray
+    }
+    
+    func setVerifyStoredDataUnsecure(data: [UInt8], tag: NFCISO7816Tag) async throws {
+        var debugOutput = "----- BiometricsAPI Set Verify Stored Data Unsecure\n"
+
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        debugOutput += "     Setting verify stored data Unsecure\n"
+        let command = try APDUCommand.setVerifyAppletStoredDataSmallUnsecure(data: data)
+
+        //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+        try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data Secure", to: tag)
         
 //        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
 //            throw SentrySDKError.apduCommandError(returnData.statusWord)
@@ -296,29 +360,6 @@ final class BiometricsAPI {
         )
     }
     
-    func getFingerprintVerificationAndStoredData(tag: NFCISO7816Tag) async throws -> FingerprintValidationAndData {
-        var debugOutput = "----- BiometricsAPI Get Fingerprint Verification And Stored Data\n"
-        var storedData: [UInt8] = []
-        
-        defer {
-            if isDebugOutputVerbose { print(debugOutput) }
-        }
-
-        debugOutput += "     Get Fingerprint Verification\n"
-        let isVerified = try await getFingerprintVerification(tag: tag)
-        
-        if isVerified {
-            debugOutput += "     Selecting Verify applet\n"
-            try await initializeVerify(tag: tag)
-            
-            debugOutput += "     Storing data\n"
-            storedData.append(contentsOf: try await getVerifyStoredData(tag: tag))
-        }
-        
-        debugOutput += "------------------------------\n"
-        return FingerprintValidationAndData(doesFingerprintMatch: isVerified, storedData: storedData)
-    }
-    
     /**
      Scans the finger currently on the fingerprint sensor, indicating if the scanned fingerprint matches one recorded during enrollment.
      
@@ -395,25 +436,6 @@ final class BiometricsAPI {
         
         debugOutput += "     Remaining: \(enrollmentStatus.remainingTouches)\n------------------------------\n"
         return enrollmentStatus.remainingTouches
-    }
-    
-    func verifyEnrolledFingerprintAndStoreData(data: [UInt8], tag: NFCISO7816Tag) async throws {
-        var debugOutput = "----- BiometricsAPI Verify Enrolled Fingerprint And Store Data\n"
-        
-        defer {
-            if isDebugOutputVerbose { print(debugOutput) }
-        }
-
-        debugOutput += "     Verifying enrolled fingerprint\n"
-        try await verifyEnrolledFingerprint(tag: tag)
-        
-        debugOutput += "     Selecting Verify applet\n"
-        try await initializeVerify(tag: tag)
-        
-        debugOutput += "     Storing data\n"
-        try await setVerifyStoredData(data: data, tag: tag)
-        
-        debugOutput += "------------------------------\n"
     }
     
     /**

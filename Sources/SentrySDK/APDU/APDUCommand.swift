@@ -40,8 +40,12 @@ enum APDUCommand {
     /// Retrieves the Verify applet version information.
     static let getVerifyAppletVersion: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
     
-    /// Retrieves the data stored in the Verify applet.
-    static let getVerifyAppletStoredData: [UInt8] = [0x80, 0xCA, 0x5F, 0xC2, 0x00, 0x08, 0x00]      // Note: Always expects 2k bytes of data
+    /// Retrieves the data stored in the huge data slot of the Verify applet.
+    static let getVerifyAppletStoredDataHugeSecured: [UInt8] = [0x80, 0xCB, 0x01, 0xC2, 0x00, 0x0F, 0xFF]       // up to 2048 bytes
+    
+    static let getVerifyAppletStoredDataSmallUnsecured: [UInt8] = [0x80, 0xCA, 0x5F, 0xB0, 0xFF]                // up to 255 bytes
+    
+    static let getVerifyAppletStoredDataSmallSecured: [UInt8] = [0x80, 0xCB, 0x01, 0xD0, 0xFF]                  // up to 255 bytes
 
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
@@ -60,9 +64,11 @@ enum APDUCommand {
         return setCodeCommand
     }
     
-    /// Sets the data stored in the Verify applet.
-    static func setVerifyAppletStoredData(data: [UInt8]) throws -> [UInt8] {
-        if data.count > SentrySDKConstants.MAX_DATA_SIZE {
+    /// Sets the data stored in the huge data slot of the Verify applet.
+    /// NOTE: Both the secure and unsecure version of this command write to the same data store slot
+    /// NOTE: This command is only included in case we want to reverse some changes to the way the large data slot is used. This command will likely become obsolete.
+    static func setVerifyAppletStoredDataLargeUnsecure(data: [UInt8]) throws -> [UInt8] {
+        if data.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
         }
             
@@ -73,6 +79,44 @@ enum APDUCommand {
         
         return setVerifyAppletStoredData
     }
+    
+    static func setVerifyAppletStoredDataLargeSecure(data: [UInt8]) throws -> [UInt8] {
+        if data.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
+        }
+            
+        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDB, 0x01, 0xC2, 0x00]
+        setVerifyAppletStoredData.append(UInt8((data.count & 0xFF00) >> 8))
+        setVerifyAppletStoredData.append(UInt8(data.count & 0x00FF))
+        setVerifyAppletStoredData.append(contentsOf: data)
+        
+        return setVerifyAppletStoredData
+    }
+
+    static func setVerifyAppletStoredDataSmallUnsecure(data: [UInt8]) throws -> [UInt8] {
+        if data.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
+        }
+            
+        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDA, 0x5F, 0xB0]
+        setVerifyAppletStoredData.append(UInt8(data.count & 0x00FF))
+        setVerifyAppletStoredData.append(contentsOf: data)
+        
+        return setVerifyAppletStoredData
+    }
+
+    static func setVerifyAppletStoredDataSmallSecure(data: [UInt8]) throws -> [UInt8] {
+        if data.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
+        }
+            
+        var setVerifyAppletStoredData: [UInt8] = [0x80, 0xDB, 0x01, 0xD0]
+        setVerifyAppletStoredData.append(UInt8(data.count & 0x00FF))
+        setVerifyAppletStoredData.append(contentsOf: data)
+        
+        return setVerifyAppletStoredData
+    }
+
 
     
     // MARK: - Private Methods
