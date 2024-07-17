@@ -42,6 +42,9 @@ public enum SentrySDKError: Error {
     
     /// Indicates that the java card is already enrolled and is in verification state.
     case enrollModeNotAvailable
+    
+    /// TEMPORARY
+    case bioVerifyAppletWrongVersion
         
     
     // The following errors should never occur, and indicate bugs in the code.

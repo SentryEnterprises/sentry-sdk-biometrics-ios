@@ -392,6 +392,8 @@ public class SentrySDK: NSObject {
             let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
             if !verifyVersion.isInstalled {
                 throw SentrySDKError.bioverifyAppletNotInstalled
+            } else if verifyVersion.majorVersion < 1 && verifyVersion.minorVersion < 3 {
+                throw SentrySDKError.bioVerifyAppletWrongVersion
             }
             
             if let session = session {
@@ -429,6 +431,8 @@ public class SentrySDK: NSObject {
             let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
             if !verifyVersion.isInstalled {
                 throw SentrySDKError.bioverifyAppletNotInstalled
+            } else if verifyVersion.majorVersion < 1 && verifyVersion.minorVersion < 3 {
+                throw SentrySDKError.bioVerifyAppletWrongVersion
             }
             
             if let session = session {
