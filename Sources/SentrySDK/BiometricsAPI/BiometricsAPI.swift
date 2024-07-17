@@ -112,7 +112,7 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
     }
     
-    func getVerifyStoredDataSecure(tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> [UInt8] {
+    func getVerifyStoredDataSecure(tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> FingerprintValidationAndData {
         var debugOutput = "----- BiometricsAPI Get Verify Stored Data Secure, slot: \(dataSlot)\n"
 
         defer {
@@ -138,8 +138,13 @@ final class BiometricsAPI {
 //        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
         let dataArray = returnData.data.toArrayOfBytes()
         
-        debugOutput += "------------------------------\n"
-        return dataArray
+        if dataArray[0] == 0xD7 || dataArray[0] == 0x5A {
+            debugOutput += "     No Match\n------------------------------\n"
+            return FingerprintValidationAndData(doesFingerprintMatch: false, storedData: [])
+        } else {
+            debugOutput += "     Match\n------------------------------\n"
+            return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: dataArray)
+        }
     }
     
     func setVerifyStoredDataSecure(data: [UInt8], tag: NFCISO7816Tag, dataSlot: DataSlot) async throws {

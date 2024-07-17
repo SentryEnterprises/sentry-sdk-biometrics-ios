@@ -410,7 +410,7 @@ public class SentrySDK: NSObject {
         }
     }
     
-    public func retrieveDataSecure(dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> [UInt8] {
+    public func retrieveDataSecure(dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> FingerprintValidationAndData {
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
