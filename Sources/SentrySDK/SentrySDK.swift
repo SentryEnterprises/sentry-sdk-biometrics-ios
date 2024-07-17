@@ -361,7 +361,7 @@ public class SentrySDK: NSObject {
         }
     }
 
-    public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws {
+    public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> Bool {
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -400,7 +400,7 @@ public class SentrySDK: NSObject {
 
             try await biometricsAPI.initializeVerify(tag: isoTag)
             
-            try await biometricsAPI.setVerifyStoredDataSecure(data: dataToStore, tag: isoTag, dataSlot: dataSlot)
+            return try await biometricsAPI.setVerifyStoredDataSecure(data: dataToStore, tag: isoTag, dataSlot: dataSlot)
         } catch (let error) {
             errorDuringSession = true
             if let session = session {

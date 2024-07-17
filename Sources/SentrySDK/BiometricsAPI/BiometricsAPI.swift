@@ -129,13 +129,10 @@ final class BiometricsAPI {
         
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.getVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
         
-        let returnData = try await send(apduCommand: command, name: "Get Verify Stored Data Secure", to: tag)
+        let returnData = try await sendAndConfirm(apduCommand: command, name: "Get Verify Stored Data Secure", to: tag)
         
-        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
-            throw SentrySDKError.apduCommandError(returnData.statusWord)
-        }
-
 //        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
+        
         let dataArray = returnData.data.toArrayOfBytes()
         
         if dataArray[0] == 0xD7 || dataArray[0] == 0x5A {
@@ -147,7 +144,7 @@ final class BiometricsAPI {
         }
     }
     
-    func setVerifyStoredDataSecure(data: [UInt8], tag: NFCISO7816Tag, dataSlot: DataSlot) async throws {
+    func setVerifyStoredDataSecure(data: [UInt8], tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> Bool {
         var debugOutput = "----- BiometricsAPI Set Verify Stored Data Secure, slot: \(dataSlot)\n"
 
         defer {
@@ -163,7 +160,7 @@ final class BiometricsAPI {
         }
         
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-        try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data Secure", to: tag)
+        let returnData = try await sendAndConfirm(apduCommand: command, name: "Set Verify Stored Data Secure", to: tag)
         
 //        if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
 //            throw SentrySDKError.apduCommandError(returnData.statusWord)
@@ -171,7 +168,15 @@ final class BiometricsAPI {
 //
 //        let dataArray = try unwrapAPDUResponse(response: returnData.data.toArrayOfBytes(), statusWord: returnData.statusWord, keyENC: keyENC, keyRMAC: keyRMAC, chainingValue: chainingValue, encryptionCounter: encryptionCounter)
         
-        debugOutput += "------------------------------\n"
+        let dataArray = returnData.data.toArrayOfBytes()
+        
+        if dataArray[0] == 0xD7 || dataArray[0] == 0x5A {
+            debugOutput += "     No Match\n------------------------------\n"
+            return false
+        } else {
+            debugOutput += "     Match\n------------------------------\n"
+            return true
+        }
     }
 
     func getVerifyStoredDataUnsecure(tag: NFCISO7816Tag) async throws -> [UInt8] {
