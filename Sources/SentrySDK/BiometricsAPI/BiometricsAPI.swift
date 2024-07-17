@@ -135,7 +135,7 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray[0] == 0xD7 || dataArray[0] == 0x5A {
+        if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
             debugOutput += "     No Match\n------------------------------\n"
             return FingerprintValidationAndData(doesFingerprintMatch: false, storedData: [])
         } else {
@@ -156,7 +156,7 @@ final class BiometricsAPI {
 
         switch dataSlot {
         case .small: command = try APDUCommand.setVerifyAppletStoredDataSmallSecure(data: data)
-        case .huge:  command = try APDUCommand.setVerifyAppletStoredDataLargeSecure(data: data)
+        case .huge:  command = try APDUCommand.setVerifyAppletStoredDataHugeSecure(data: data)
         }
         
         //let command = try wrapAPDUCommand(apduCommand: APDUCommand.setVerifyAppletStoredData, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
@@ -170,7 +170,7 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray[0] == 0xD7 || dataArray[0] == 0x5A {
+        if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
             debugOutput += "     No Match\n------------------------------\n"
             return false
         } else {

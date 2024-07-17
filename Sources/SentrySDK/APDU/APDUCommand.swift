@@ -67,7 +67,7 @@ enum APDUCommand {
     /// Sets the data stored in the huge data slot of the Verify applet.
     /// NOTE: Both the secure and unsecure version of this command write to the same data store slot
     /// NOTE: This command is only included in case we want to reverse some changes to the way the large data slot is used. This command will likely become obsolete.
-    static func setVerifyAppletStoredDataLargeUnsecure(data: [UInt8]) throws -> [UInt8] {
+    static func setVerifyAppletStoredDataHugeUnsecure(data: [UInt8]) throws -> [UInt8] {
         if data.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
         }
@@ -80,7 +80,7 @@ enum APDUCommand {
         return setVerifyAppletStoredData
     }
     
-    static func setVerifyAppletStoredDataLargeSecure(data: [UInt8]) throws -> [UInt8] {
+    static func setVerifyAppletStoredDataHugeSecure(data: [UInt8]) throws -> [UInt8] {
         if data.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
         }
