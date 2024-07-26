@@ -25,22 +25,22 @@ public enum SentrySDKError: Error {
     /// APDU specific error.
     case apduCommandError(Int)
     
-    /// The applets on the java card do not appear to support secure communication.
+    /// The applets on the SentryCard do not appear to support secure communication.
     case secureCommunicationNotSupported
     
-    /// The amount of data the system attempted to store on the java card was too big (maximum size supported is 2048 bytes).
+    /// The amount of data the system attempted to store on the SentryCard was too big (maximum size supported is 2048 bytes).
     case dataSizeNotSupported
     
-    /// The CVM applet on the card was unavailable.
+    /// The CVM applet on the SentryCard was unavailable.
     case cvmAppletNotAvailable
     
-    /// The CVM applet on the card is blocked, and the card will need a reset.
+    /// The CVM applet on the SentryCard is blocked, and the SentryCard will need a reset.
     case cvmAppletBlocked
     
-    /// The BioVerify applet is not installed on the java card.
+    /// The BioVerify applet is not installed on the SentryCard.
     case bioverifyAppletNotInstalled
     
-    /// Indicates that the java card is already enrolled and is in verification state.
+    /// Indicates that the SentryCard is already enrolled and is in verification state.
     case enrollModeNotAvailable
     
     /// TEMPORARY
@@ -49,7 +49,7 @@ public enum SentrySDKError: Error {
     
     // The following errors should never occur, and indicate bugs in the code.
     
-    /// The buffer returned from querying the card for its biometric enrollment status was unexpectedly too small. This indicates something has changed in either the java OS running on the scanned device or the Enroll applet itself.
+    /// The buffer returned from querying the card for its biometric enrollment status was unexpectedly too small. This indicates something has changed in either the OS running on the scanned device or the Enroll applet itself.
     case enrollmentStatusBufferTooSmall
     
     /// The buffer used in the `NFCISO7816APDU` constructor was not a valid `APDU` command. This should only occur if CoreNFC changes dramatically, or the APDU command itself is incorrect and was never tested.
@@ -61,7 +61,7 @@ public enum SentrySDKError: Error {
     /// Indicates that a secure channel with the card could not be created.
     case secureChannelInitializationError
     
-    /// Indicates an error in the data buffer returned from querying the java card OS version.
+    /// Indicates an error in the data buffer returned from querying the SentryCard OS version.
     case cardOSVersionError
     
     /// Indicates an error occurred generating the public/private key pair, or other keys.

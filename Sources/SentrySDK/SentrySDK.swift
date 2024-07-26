@@ -14,7 +14,7 @@ import sentry_api_security
  
  This class controls and manages an `NFCReaderSession` to communicate with an `NFCISO7816Tag` via `APDU` commands.
  
- The bioverify.cap, com.idex.enroll.cap, and com.jnet.CDCVM.cap applets must be installed on the java card for full access to all functionality of this SDK.
+ The bioverify.cap, com.idex.enroll.cap, and com.jnet.CDCVM.cap applets must be installed on the SentryCard for full access to all functionality of this SDK.
  */
 public class SentrySDK: NSObject {
     // MARK: - Private Properties
@@ -29,7 +29,7 @@ public class SentrySDK: NSObject {
     
     // MARK: - Public Properties
     
-    /// Gets or sets the text displayed in the NFC scanning UI when an error occurs while communicating with the java card.
+    /// Gets or sets the text displayed in the NFC scanning UI when an error occurs while communicating with the SentryCard..
     public var cardCommunicationErrorText = "An error occurred while communicating with the card."
     
     /// Gets or sets the text displayed in the NFC scanning UI when scanning starts.
@@ -69,12 +69,12 @@ public class SentrySDK: NSObject {
     /**
      Creates a new instance of `SentrySDK`.
      
-     - Note: The indicated `enrollCode` MUST be the same code used when the com.idex.enroll.cap applet was installed on the java card. See the installation script for the java card to retrieve the enroll code.
+     - Note: The indicated `enrollCode` MUST be the same code used when the com.idex.enroll.cap applet was installed on the SentryCard. See the installation script for the SentryCard to retrieve the enroll code.
      
      - Parameters:
         - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
-        - useSecureCommunication: Indicates if communication with the java card is encrypted (defaults to `true`).
+        - useSecureCommunication: Indicates if communication with the SentryCard is encrypted (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
      */
@@ -87,11 +87,13 @@ public class SentrySDK: NSObject {
     // MARK: - Public Methods
     
     /**
-     Retrieves version information for all necessary applets installed on the scanned java card.
+     Retrieves version information for all necessary applets installed on the scanned SentryCard.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
      - Note: Applets prior to version 1.32 do not support this functionality and return -1 for all version values. This method is provided for debugging purposes.
      
-     - Returns: A `CardVersionInfo` structure containing `VersionInfo` structures for the java card operating system and all required applets, if those applets are installed.
+     - Returns: A `CardVersionInfo` structure containing `VersionInfo` structures for the SentryCard operating system and all required applets, if those applets are installed.
      
      This method can throw the following exceptions:
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
@@ -138,7 +140,7 @@ public class SentrySDK: NSObject {
     /**
      Retrieves the biometric fingerprint enrollment status.
      
-     Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
      - Returns: A `BiometricEnrollmentStatus` structure containing information on the fingerprint enrollment status.
      
@@ -166,7 +168,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
+            try await biometricsAPI.initializeEnroll(tag: isoTag, enrollCode: enrollCode)
             
             // get and return the enrollment status
             let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
@@ -180,7 +182,7 @@ public class SentrySDK: NSObject {
     /**
      Validates that the finger on the fingerprint sensor matches (or does not match) a fingerprint recorded during enrollment.
      
-     Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
      This process waits up to five (5) seconds for a finger to be pressed against the sensor. This timeout is (currently) not configurable. If a finger is not detected on the sensor within the
      timeout period, a `SentrySDKError.apduCommandError` is thrown, indicating either a user timeout expiration (0x6748) or a host interface timeout expiration (0x6749).
@@ -192,8 +194,8 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
-     * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet on the java card could not be initialized.
-     * `SentrySDKError.cvmAppletBlocked` if the CVM applet on the java card is blocked (likely requiring a full card reset).
+     * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet on the SentryCard could not be initialized.
+     * `SentrySDKError.cvmAppletBlocked` if the CVM applet on the SentryCard is blocked (likely requiring a full card reset).
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
@@ -233,12 +235,12 @@ public class SentrySDK: NSObject {
      This process waits up to five (5) seconds for a finger to be pressed against the sensor. This timeout is (currently) not configurable. If a finger is not detected on the sensor within the
      timeout period, a `SentrySDKError.apduCommandError` is thrown, indicating either a user timeout expiration (0x6748) or a host interface timeout expiration (0x6749).
 
-     Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
      - Note: Assumes that the Enroll applet only supports a single finger for enrollment.
      
      - Parameters:
-        - connected: A callback method that receives a boolean value. This is called with `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
+        - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
         - stepFinished: A callback method that receives the current enrollment scan step that just finished, and the total number of steps required (i.e. scan two (2) out of the six (6) required). Callers should use this to update UI indicating the percentage completed.
      
      This method can throw the following exceptions:
@@ -246,9 +248,7 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
-//     * `SentrySDKError.dataSizeNotSupported` if the `dataToStore` array size is > 2048 bytes.
-     * `SentrySDKError.bioverifyAppletNotInstalled` if the BioVerify applet is not installed on the java card.
-     * `SentrySDKError.enrollModeNotAvailable` if the java card is already enrolled and is in verification state.
+     * `SentrySDKError.enrollModeNotAvailable` if the SentryCard is already enrolled and is in verification state.
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
@@ -272,7 +272,7 @@ public class SentrySDK: NSObject {
             }
             
             // initialize the Enroll applet
-            try await biometricsAPI.initializeEnroll(enrollCode: enrollCode, tag: isoTag)
+            try await biometricsAPI.initializeEnroll(tag: isoTag, enrollCode: enrollCode)
             
             // get the current enrollment status
             let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
@@ -308,6 +308,24 @@ public class SentrySDK: NSObject {
         }
     }
     
+    /**
+     Writes up to 255 bytes of data to the small data slot on the SentryCard.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - dataToStore: An array of up to 255 `UInt8` bytes to write to the data slot.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.dataSizeNotSupported` if the `data` parameter is larger than 255 bytes in size.
+     * `SentrySDKError.bioVerifyAppletNotInstalled` if the BioVerify applet is not installed on the scanned SentryCard.
+     * `SentrySDKError.bioVerifyAppletWrongVersion` if the BioVerify applet installed on the SentryCard does not support data storage.
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+
+     */
     public func storeDataUnsecure(dataToStore: [UInt8]) async throws {
         var errorDuringSession = false
         defer {
@@ -328,15 +346,39 @@ public class SentrySDK: NSObject {
             // establish a connection
             let isoTag = try await establishConnection()
             
+            // make sure the Verify applet is installed or we cannot store data
+            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
+            if !verifyVersion.isInstalled {
+                throw SentrySDKError.bioverifyAppletNotInstalled
+            } else if verifyVersion.majorVersion <= 1 && verifyVersion.minorVersion < 3 {
+                throw SentrySDKError.bioVerifyAppletWrongVersion
+            }
+
             try await biometricsAPI.initializeVerify(tag: isoTag)
             
-            try await biometricsAPI.setVerifyStoredDataUnsecure(data: dataToStore, tag: isoTag)
+            try await biometricsAPI.setVerifyStoredDataUnsecure(tag: isoTag, data: dataToStore)
         } catch (let error) {
             errorDuringSession = true
             throw error
         }
     }
     
+    /**
+     Retrieves the data stored in the small data slot on the SentryCard.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+          
+     - Returns: The data stored in the small data slot on the SentryCard (up to 255 bytes).
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.bioVerifyAppletNotInstalled` if the BioVerify applet is not installed on the scanned SentryCard.
+     * `SentrySDKError.bioVerifyAppletWrongVersion` if the BioVerify applet installed on the SentryCard does not support data storage.
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+
+     */
     public func retrieveDataUnsecure() async throws -> [UInt8] {
         var errorDuringSession = false
         defer {
@@ -352,6 +394,14 @@ public class SentrySDK: NSObject {
             // establish a connection
             let isoTag = try await establishConnection()
             
+            // make sure the Verify applet is installed or we cannot store data
+            let verifyVersion = try await biometricsAPI.getVerifyAppletVersion(tag: isoTag)
+            if !verifyVersion.isInstalled {
+                throw SentrySDKError.bioverifyAppletNotInstalled
+            } else if verifyVersion.majorVersion <= 1 && verifyVersion.minorVersion < 3 {
+                throw SentrySDKError.bioVerifyAppletWrongVersion
+            }
+
             try await biometricsAPI.initializeVerify(tag: isoTag)
             
             return try await biometricsAPI.getVerifyStoredDataUnsecure(tag: isoTag)
@@ -361,6 +411,28 @@ public class SentrySDK: NSObject {
         }
     }
 
+    /**
+     Writes data to the indicated data slot on the SentryCard. A biometric verification is performed first before writing the data. The `.small` data slot holds up to 255 bytes of data, and the `.huge` data slot holds up to 2048 bytes of data.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - dataToStore: An array of `UInt8`bytes to write to the indicated data slot.
+        - dataSlot: The data slot to which the data is written.
+        - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
+     
+     - Returns: `True`if the finger on the sensor matches the fingerprint recorded during enrollment. If there is a successful match, the indicated data is written to the indicated data slot. Otherwise, returns `false`.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.dataSizeNotSupported` if the `data` parameter is larger than 255 bytes in size for the `.small` data slot, or 2048 bytes for the `.huge` data slot.
+     * `SentrySDKError.bioVerifyAppletNotInstalled` if the BioVerify applet is not installed on the scanned SentryCard.
+     * `SentrySDKError.bioVerifyAppletWrongVersion` if the BioVerify applet installed on the SentryCard does not support data storage.
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+
+     */
     public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> Bool {
         var errorDuringSession = false
         defer {
@@ -402,7 +474,7 @@ public class SentrySDK: NSObject {
 
             try await biometricsAPI.initializeVerify(tag: isoTag)
             
-            return try await biometricsAPI.setVerifyStoredDataSecure(data: dataToStore, tag: isoTag, dataSlot: dataSlot)
+            return try await biometricsAPI.setVerifyStoredDataSecure(tag: isoTag, data: dataToStore, dataSlot: dataSlot)
         } catch (let error) {
             errorDuringSession = true
             if let session = session {
@@ -412,6 +484,26 @@ public class SentrySDK: NSObject {
         }
     }
     
+    /**
+     Retrieves the data stored in the indicated data slot on the SentryCard. A biometric verification is performed first before retrieving the data.
+     
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - dataSlot: The data slot from which data is retrieved.
+        - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
+     
+     - Returns: A `FingerprintValidationAndData` structure indicating if the finger on the sensor matches the fingerprint recorded during enrollment. If there is a successful match, this structure also contains the data stored in the indicated data slot. The `.small` data slot returns up to 255 bytes of data. The `.huge` data slot returns up to 2048 bytes of data.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.bioVerifyAppletNotInstalled` if the BioVerify applet is not installed on the scanned SentryCard.
+     * `SentrySDKError.bioVerifyAppletWrongVersion` if the BioVerify applet installed on the SentryCard does not support data storage.
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+
+     */
     public func retrieveDataSecure(dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> FingerprintValidationAndData {
         var errorDuringSession = false
         defer {
@@ -453,7 +545,7 @@ public class SentrySDK: NSObject {
     /**
      Resets the biometric data recorded on the card. This effectively erases all fingerprint enrollment and puts the card into an unenrolled state.
      
-     Opens an `NFCReaderSession`, connects to an `NFCISO7816` through this session, and sends `APDU` commands to a java applet running on the connected tag/java card.
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
      - Warning: This is for development purposes only! This command only works on development cards, and fails when used on production cards.
      

@@ -40,11 +40,13 @@ enum APDUCommand {
     /// Retrieves the Verify applet version information.
     static let getVerifyAppletVersion: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
     
-    /// Retrieves the data stored in the huge data slot of the Verify applet.
+    /// Retrieves the data stored in the huge data slot of the Verify applet (requires biometric verification).
     static let getVerifyAppletStoredDataHugeSecured: [UInt8] = [0x80, 0xCB, 0x01, 0xC2, 0x00, 0x0F, 0xFF]       // up to 2048 bytes
     
+    /// Retrieves the data stored in the small data slot of the Verify applet.
     static let getVerifyAppletStoredDataSmallUnsecured: [UInt8] = [0x80, 0xCA, 0x5F, 0xB0, 0xFF]                // up to 255 bytes
     
+    /// Retrieves the data stored in the small data slot of the Verify applet (requires biometric verification).
     static let getVerifyAppletStoredDataSmallSecured: [UInt8] = [0x80, 0xCB, 0x01, 0xD0, 0xFF]                  // up to 255 bytes
 
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
@@ -80,6 +82,7 @@ enum APDUCommand {
         return setVerifyAppletStoredData
     }
     
+    /// Sets the data stored in the huge data slot of the Verify applet (requires biometric verification).
     static func setVerifyAppletStoredDataHugeSecure(data: [UInt8]) throws -> [UInt8] {
         if data.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
@@ -93,6 +96,7 @@ enum APDUCommand {
         return setVerifyAppletStoredData
     }
 
+    /// Sets the data stored in the small data slot of the Verify applet.
     static func setVerifyAppletStoredDataSmallUnsecure(data: [UInt8]) throws -> [UInt8] {
         if data.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
@@ -105,6 +109,7 @@ enum APDUCommand {
         return setVerifyAppletStoredData
     }
 
+    /// Sets the data stored in the small data slot of the Verify applet (requires biometric verification).
     static func setVerifyAppletStoredDataSmallSecure(data: [UInt8]) throws -> [UInt8] {
         if data.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported

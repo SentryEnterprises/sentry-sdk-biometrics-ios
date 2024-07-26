@@ -54,7 +54,7 @@ final class BiometricsAPI {
      
      - Parameters:
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
-        - useSecureCommunication: Indicates if communication with the java card is encrypted (defaults to `true`).
+        - useSecureCommunication: Indicates if communication with the SentryCard is encrypted (defaults to `true`).
      
      - Returns: A newly instantiated `BiometricsAPI` object.
      */
@@ -66,6 +66,20 @@ final class BiometricsAPI {
     
     // MARK: - Methods
     
+    /**
+     Initializes the BioVerify applet by selecting the applet on the SentryCard. Call this method before calling other methods in this unit that communicate with the BioVerify applet.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not setup during initialization.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.secureChannelInitializationError` if `useSecureCommunication` is `true` but an error occurred initializing the secure communication encryption.
+     * `SentrySDKError.secureCommunicationNotSupported` if `useSecureCommunication` is `true` but the version of the BioVerify applet on the SentryCard does nto support secure communication (highly unlikely).
+
+     */
     func initializeVerify(tag: NFCISO7816Tag) async throws {
         var debugOutput = "----- BiometricsAPI Initialize Verify\n"
         
@@ -112,6 +126,21 @@ final class BiometricsAPI {
         debugOutput += "------------------------------\n"
     }
     
+    /**
+     Retrieves the data stored in the indicated data slot on the SentryCard. A biometric verification is performed first before retrieving the data.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - dataSlot: The data slot from which data is retrieved.
+     
+     - Returns: A `FingerprintValidationAndData` structure indicating if the finger on the sensor matches the fingerprint recorded during enrollment. If there is a successful match, this structure also contains the data stored in the indicated data slot. The `.small` data slot returns up to 255 bytes of data. The `.huge` data slot returns up to 2048 bytes of data.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
     func getVerifyStoredDataSecure(tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> FingerprintValidationAndData {
         var debugOutput = "----- BiometricsAPI Get Verify Stored Data Secure, slot: \(dataSlot)\n"
 
@@ -144,7 +173,24 @@ final class BiometricsAPI {
         }
     }
     
-    func setVerifyStoredDataSecure(data: [UInt8], tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> Bool {
+    /**
+     Writes data to the indicated data slot on the SentryCard. A biometric verification is performed first before writing the data. The `.small` data slot holds up to 255 bytes of data, and the `.huge` data slot holds up to 2048 bytes of data.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - data: An array of `UInt8`bytes to write to the indicated data slot.
+        - dataSlot: The data slot to which the data is written.
+     
+     - Returns: `True`if the finger on the sensor matches the fingerprint recorded during enrollment. If there is a successful match, the indicated data is written to the indicated data slot. Otherwise, returns `false`.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.dataSizeNotSupported` if the `data` parameter is larger than 255 bytes in size for the `.small` data slot, or 2048 bytes for the `.huge` data slot.
+
+     */
+    func setVerifyStoredDataSecure(tag: NFCISO7816Tag, data: [UInt8], dataSlot: DataSlot) async throws -> Bool {
         var debugOutput = "----- BiometricsAPI Set Verify Stored Data Secure, slot: \(dataSlot)\n"
 
         defer {
@@ -179,6 +225,20 @@ final class BiometricsAPI {
         }
     }
 
+    /**
+     Retrieves the data stored in the small, unsecured data slot on the SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: The data stored in the small, unsecured data slot on the SentryCard (up to 255 bytes).
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+
+     */
     func getVerifyStoredDataUnsecure(tag: NFCISO7816Tag) async throws -> [UInt8] {
         var debugOutput = "----- BiometricsAPI Get Verify Stored Data Unsecure\n"
 
@@ -203,7 +263,21 @@ final class BiometricsAPI {
         return dataArray
     }
     
-    func setVerifyStoredDataUnsecure(data: [UInt8], tag: NFCISO7816Tag) async throws {
+    /**
+     Writes up to 255 bytes of data to the small data slot on the SentryCard.
+     
+     - Note: The BioVerify applet does not currently support secure communication, so a secure channel is not used.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - data: An array of `UInt8` bytes to write to the data slot (up to 255 bytes in size).
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.dataSizeNotSupported` if the `data` parameter is larger than 255 bytes in size.
+
+     */
+    func setVerifyStoredDataUnsecure(tag: NFCISO7816Tag, data: [UInt8]) async throws {
         var debugOutput = "----- BiometricsAPI Set Verify Stored Data Unsecure\n"
 
         defer {
@@ -226,20 +300,21 @@ final class BiometricsAPI {
     }
 
     /**
-     Initializes the Enroll applet by selecting the applet on the SentryCard and verifying the enroll code. If no enroll code is set, this sets the enroll code to the indicated value. Call this
-     method before calling other methods in this unit.
+     Initializes the Enroll applet by selecting the applet on the SentryCard and verifying the enroll code. If no enroll code is set, this sets the enroll code to the indicated value. Call this method before calling other methods in this unit that communicate with the Enroll applet.
      
      - Parameters:
-        - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
      
      This method can throw the following exceptions:
      * `SentrySDKError.enrollCodeLengthOutOfbounds` if the indicated `enrollCode` is less than four (4) characters or more than six (6) characters in length.
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
+     * `SentrySDKError.secureChannelInitializationError` if `useSecureCommunication` is `true` but an error occurred initializing the secure communication encryption.
+     * `SentrySDKError.secureCommunicationNotSupported` if `useSecureCommunication` is `true` but the version of the Enroll applet on the SentryCard does nto support secure communication (highly unlikely).
      
      */
-    func initializeEnroll(enrollCode: [UInt8], tag: NFCISO7816Tag) async throws {
+    func initializeEnroll(tag: NFCISO7816Tag, enrollCode: [UInt8]) async throws {
         var debugOutput = "----- BiometricsAPI Initialize Enroll - Enroll Code: \(enrollCode)\n"
         
         defer {
@@ -500,7 +575,7 @@ final class BiometricsAPI {
     }
 
     /**
-     Retrieves the version of the java card operating system installed on the scanned card.
+     Retrieves the version of the operating system installed on the scanned SentryCard.
      
      - Parameters:
         - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.

@@ -28,10 +28,10 @@ public struct VersionInfo {
 }
 
 /**
- Contains version information for the scanned card.
+ Contains version information for the SentryCard.
  */
 public struct CardVersionInfo {
-    /// The java card operating system version.
+    /// The SentryCard operating system version.
     public let osVersion: VersionInfo
     
     /// The enrollment applet version.
