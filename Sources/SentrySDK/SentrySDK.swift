@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreNFC
-import sentry_api_security
+import Security
 
 /**
  Entry point for the `SentrySDK` functionality. Provides methods exposing all available functionality.
@@ -40,7 +40,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 6, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 7, hotfixVersion: 0, text: nil) }
     }
     
     /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
