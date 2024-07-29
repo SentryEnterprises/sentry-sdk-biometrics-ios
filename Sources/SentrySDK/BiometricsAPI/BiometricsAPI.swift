@@ -164,12 +164,17 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
-            debugOutput += "     No Match\n------------------------------\n"
-            return FingerprintValidationAndData(doesFingerprintMatch: false, storedData: [])
+        if dataArray.count > 0 {
+            if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
+                debugOutput += "     No Match\n------------------------------\n"
+                return FingerprintValidationAndData(doesFingerprintMatch: false, storedData: [])
+            } else {
+                debugOutput += "     Match\n------------------------------\n"
+                return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: dataArray)
+            }
         } else {
-            debugOutput += "     Match\n------------------------------\n"
-            return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: dataArray)
+            // we may have a match but nothing actually stored in the data slot
+            return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: [])
         }
     }
     
