@@ -37,6 +37,7 @@ public enum APDUResponseCode: Int {
     case conditionOfUseNotSatisfied = 0x6985
     
     /// Checking errors - wrong parameters
+    case appletNotFound = 0x6A82
     case notEnoughMemory = 0x6A84
     
     /// Checking errors - wrong parameters

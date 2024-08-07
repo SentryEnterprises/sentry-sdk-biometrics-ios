@@ -58,13 +58,6 @@ enum APDUCommand {
         try verifyCodeCommand.append(contentsOf: constructCodeBuffer(code: code))
         return verifyCodeCommand
     }
-
-    /// Sets the enroll code.
-    static func setEnrollCode(code: [UInt8]) throws -> [UInt8] {
-        var setCodeCommand: [UInt8] = [ 0x80, 0xE2, 0x08, 0x00, 0x0B, 0x90, 0x00, 0x08]
-        try setCodeCommand.append(contentsOf: constructCodeBuffer(code: code))
-        return setCodeCommand
-    }
     
     /// Sets the data stored in the huge data slot of the Verify applet.
     /// NOTE: Both the secure and unsecure version of this command write to the same data store slot
@@ -128,6 +121,11 @@ enum APDUCommand {
     
     /// Returns a padded buffer that contains the indicated enroll code digits.
     private static func constructCodeBuffer(code: [UInt8]) throws -> [UInt8] {
+        // sanity check - enroll code must be between 4 and 6 characters
+        if code.count < 4 || code.count > 6 {
+            throw SentrySDKError.enrollCodeLengthOutOfBounds
+        }
+
         var bufferIndex = 1
         var codeBuffer: [UInt8] = []
         codeBuffer.append(0x20 + UInt8(code.count))

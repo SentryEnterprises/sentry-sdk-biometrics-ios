@@ -40,29 +40,9 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 7, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 8, hotfixVersion: 0, text: nil) }
     }
-    
-    /// Returns the dependent security api version (read-only). Note: TEMPORARY, soon to be eliminated.
-    public static var securityVersion: VersionInfo {
-        get {
-            let pointer = UnsafeMutablePointer<UInt8>.allocate(capacity: 3)
-            defer {
-                pointer.deallocate()
-            }
-            
-            LibSdkGetSdkVersion(pointer)
-            
-            var result: [UInt8] = []
-            
-            for i in 0..<3 {
-                result.append(pointer.advanced(by: i).pointee)
-            }
-            
-            return VersionInfo(isInstalled: true, majorVersion: Int(result[0]), minorVersion: Int(result[1]), hotfixVersion: Int(result[2]), text: nil)
-        }
-    }
-    
+        
     
     // MARK: - Constructors
 
@@ -77,8 +57,25 @@ public class SentrySDK: NSObject {
         - useSecureCommunication: Indicates if communication with the SentryCard is encrypted (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
+
      */
-    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) throws {
+        // sanity check - enroll code must be between 4 and 6 characters
+        if enrollCode.count < 4 || enrollCode.count > 6 {
+            throw SentrySDKError.enrollCodeLengthOutOfBounds
+        }
+
+        // each digit must be in the range 0 - 9
+        for digit in enrollCode {
+            if digit > 9 {
+                throw SentrySDKError.enrollCodeDigitOutOfBounds
+            }
+        }
+        
         self.enrollCode = enrollCode
         biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput, useSecureCommunication: useSecureCommunication)
     }
