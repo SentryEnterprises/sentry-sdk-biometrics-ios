@@ -57,24 +57,21 @@ public class SentrySDK: NSObject {
         - useSecureCommunication: Indicates if communication with the SentryCard is encrypted (defaults to `true`).
      
      - Returns: A newly initialized `SentrySDK` object.
-     
-     This method can throw the following exceptions:
-     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
-     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
-
      */
-    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) throws {
-        // sanity check - enroll code must be between 4 and 6 characters
-        if enrollCode.count < 4 || enrollCode.count > 6 {
-            throw SentrySDKError.enrollCodeLengthOutOfBounds
-        }
-
-        // each digit must be in the range 0 - 9
-        for digit in enrollCode {
-            if digit > 9 {
-                throw SentrySDKError.enrollCodeDigitOutOfBounds
-            }
-        }
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
+        // NOTE: Will likely bring this back very soon.
+        
+//        // sanity check - enroll code must be between 4 and 6 characters
+//        if enrollCode.count < 4 || enrollCode.count > 6 {
+//            throw SentrySDKError.enrollCodeLengthOutOfBounds
+//        }
+//
+//        // each digit must be in the range 0 - 9
+//        for digit in enrollCode {
+//            if digit > 9 {
+//                throw SentrySDKError.enrollCodeDigitOutOfBounds
+//            }
+//        }
         
         self.enrollCode = enrollCode
         biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput, useSecureCommunication: useSecureCommunication)

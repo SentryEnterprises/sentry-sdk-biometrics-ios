@@ -43,6 +43,9 @@ public enum SentrySDKError: Error {
     /// Indicates that the SentryCard is already enrolled and is in verification state.
     case enrollModeNotAvailable
     
+    /// Indicates that the CVM applet return an unexpected code.
+    case cvmAppletError(UInt8)
+    
     /// TEMPORARY
     case bioVerifyAppletWrongVersion
         

@@ -486,10 +486,14 @@ final class BiometricsAPI {
             if returnData.data[4] == 0xA5 {
                 debugOutput += "     Match\n------------------------------\n"
                 return true
-            } else {
+            }
+            
+            if returnData.data[4] == 0x5A {
                 debugOutput += "     No match found\n------------------------------\n"
                 return false
             }
+            
+            throw SentrySDKError.cvmAppletError(returnData.data[4])
         }
 
         throw SentrySDKError.apduCommandError(returnData.statusWord)
