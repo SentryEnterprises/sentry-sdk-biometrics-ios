@@ -28,6 +28,7 @@ public enum APDUResponseCode: Int {
     case formatNotCompliant = 0x6701
     case lengthValueNotTheOneExpected = 0x6702
     case communicationFailure = 0x6741              // IDEX Enroll applet specific
+    case calibrationError = 0x6744
     case fingerRemoved = 0x6745                     // IDEX Enroll applet specific
     case poorImageQuality = 0x6747                  // IDEX Enroll applet specific
     case userTimeoutExpired = 0x6748                // IDEX Enroll applet specific
