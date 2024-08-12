@@ -460,6 +460,9 @@ final class BiometricsAPI {
      
      This method can throw the following exceptions:
       * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+      * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet was unavailable for some reason.
+      * `SentrySDKError.cvmAppletBlocked` if the CVM applet is in a blocked state and can no longer be used.
+      * `SentrySDKError.cvmAppletError` if the CVM applet returned an unexpected error code.
      
      */
     func getFingerprintVerification(tag: NFCISO7816Tag) async throws -> Bool {
