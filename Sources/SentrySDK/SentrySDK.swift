@@ -40,7 +40,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 8, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 9, hotfixVersion: 0, text: nil) }
     }
         
     
@@ -229,14 +229,21 @@ public class SentrySDK: NSObject {
      
      This process waits up to five (5) seconds for a finger to be pressed against the sensor. This timeout is (currently) not configurable. If a finger is not detected on the sensor within the
      timeout period, a `SentrySDKError.apduCommandError` is thrown, indicating either a user timeout expiration (0x6748) or a host interface timeout expiration (0x6749).
+     
+     Currently, this supports only a single finger for enrollment.
 
      Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
      
-     - Note: Assumes that the Enroll applet only supports a single finger for enrollment.
+     - Note: If this method throws the `SentrySDKError.enrollVerificationError`, it means that the card could not verify that the finger on the sensor during the last enrollment
+     step matches the fingerprints recorded during the enrollment process (for example, a user presses their thumb on the sensor for 5 touches, and then on the last touch they use their index
+     finger). If this happens, the calling application must call this method again, setting the `withReset` parameter to `true`. This deletes all recorded biometric data and performs the
+     entire process again from the start.
      
      - Parameters:
         - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
         - stepFinished: A callback method that receives the current enrollment scan step that just finished, and the total number of steps required (i.e. scan two (2) out of the six (6) required). Callers should use this to update UI indicating the percentage completed.
+        - enrollmentComplete: A callback method that is called after all enrollment steps are finished and the enrollment process is fully completed.
+        - withReset: `True` to erase all existing biometric data and start the entire enrollment process over, `false` to perform enrollment without resetting biometric data.
      
      This method can throw the following exceptions:
      * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
@@ -244,11 +251,17 @@ public class SentrySDK: NSObject {
      * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
      * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
      * `SentrySDKError.enrollModeNotAvailable` if the SentryCard is already enrolled and is in verification state.
+     * `SentrySDKError.enrollVerificationError` if the card could not verify that the last finger touch matches the fingerprints recorded during enrollment (requires a restart of the enrollment process).
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func enrollFingerprint(connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void, stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void) async throws {
+    public func enrollFingerprint(connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void,
+                                  stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void,
+                                  enrollmentComplete: (_ session: NFCReaderSession) -> Void,
+                                  withReset: Bool) async throws {
         var errorDuringSession = false
+        var resetOnFirstCall = withReset
+        
         defer {
             // closes the NFC reader session
             if errorDuringSession {
@@ -279,20 +292,41 @@ public class SentrySDK: NSObject {
             
             // calculate the required number of steps and update the NFC reader session UI
             let maximumSteps = enrollStatus.enrolledTouches + enrollStatus.remainingTouches
-            var enrollmentsLeft = maximumSteps
+            
+            // if we're resetting, assume we have not yet enrolled anything
+            var enrollmentsLeft = resetOnFirstCall ? maximumSteps : enrollStatus.remainingTouches
             
             while enrollmentsLeft > 0 {
                 // scan the finger currently on the sensor
-                let remainingEnrollments = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
-                if remainingEnrollments <= 0 {
-                    try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                if resetOnFirstCall {
+                    enrollmentsLeft = try await biometricsAPI.resetEnrollAndScanFingerprint(tag: isoTag)
+                } else {
+                    enrollmentsLeft = try await biometricsAPI.enrollScanFingerprint(tag: isoTag)
                 }
-                enrollmentsLeft = remainingEnrollments
-                                
+                
+                resetOnFirstCall = false
+                
                 // inform the caller of the step that just finished
                 if let session = session {
                     stepFinished(session, maximumSteps - enrollmentsLeft, maximumSteps)
                 }
+            }
+            
+            // after all fingerprints are enrolled, perform a verify
+            do {
+                try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+            } catch SentrySDKError.apduCommandError(let errorCode) {
+                if errorCode == (APDUResponseCode.noMatchFound.rawValue) {
+                    // expose a custom error if the verify enrolled fingerprint command didn't find a match
+                    throw SentrySDKError.enrollVerificationError
+                } else {
+                    throw SentrySDKError.apduCommandError(errorCode)
+                }
+            }
+            
+            // enrollment is fully completed
+            if let session = session {
+                enrollmentComplete(session)
             }
         } catch (let error) {
             errorDuringSession = true

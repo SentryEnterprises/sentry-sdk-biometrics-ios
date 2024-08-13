@@ -46,6 +46,9 @@ public enum SentrySDKError: Error {
     /// Indicates that the CVM applet return an unexpected code.
     case cvmAppletError(UInt8)
     
+    /// Indicates that the card could not match enrolled fingerprints with the finger on the sensor at the end of the enrollment process. This requires the user to restart enrollment.
+    case enrollVerificationError
+    
     /// TEMPORARY
     case bioVerifyAppletWrongVersion
         

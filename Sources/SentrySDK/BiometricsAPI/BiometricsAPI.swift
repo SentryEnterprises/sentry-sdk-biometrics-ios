@@ -369,7 +369,7 @@ final class BiometricsAPI {
                     throw SentrySDKError.secureChannelInitializationError
                 }
             } catch SentrySDKError.apduCommandError(let errorCode) {
-                if errorCode == 0x6D00 {
+                if errorCode == APDUResponseCode.instructionByteNotSupported.rawValue {
                     throw SentrySDKError.secureCommunicationNotSupported    // If we get an 'INS byte not supported', the enrollment applet doesn't support secure communication
                 } else {
                     throw SentrySDKError.apduCommandError(errorCode)
@@ -535,6 +535,42 @@ final class BiometricsAPI {
         return enrollmentStatus.remainingTouches
     }
     
+    /**
+     Scans a fingerprint, recording (or enrolling) the fingerprint into the card's internal biometrics database. This is exactly the same call as`enrollScanFingerprint()` except that this method also removes all previoiusly recorded fingerprints,
+     effectively resetting enrollment.
+     
+     - Note: Call this only ONCE to reset enrollment, and only for the first touch. Call `enrollScanFingerprint()` for all subsequent touches.
+     
+     - Parameters:
+        - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+     
+     - Returns: The number of required fingerprint scans remaining to complete enrollment.
+     
+     This method can throw the following exceptions:
+      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     
+     */
+    func resetEnrollAndScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
+        var debugOutput = "----- BiometricsAPI Reset Enroll and Scan Fingerprint\n"
+        
+        defer {
+            if isDebugOutputVerbose { print(debugOutput) }
+        }
+        
+        if useSecureChannel {
+            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.restartEnrollAndProcessfingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Reset And Process Fingerprint", to: tag)
+        } else {
+            try await sendAndConfirm(apduCommand: APDUCommand.restartEnrollAndProcessfingerprint, name: "Reset And Process Fingerprint", to: tag)
+        }
+        
+        debugOutput += "     Getting enrollment status\n"
+        let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
+        
+        debugOutput += "     Remaining: \(enrollmentStatus.remainingTouches)\n------------------------------\n"
+        return enrollmentStatus.remainingTouches
+    }
+
     /**
      Verifies the fingerprint just enrolled. Used only after scanning a fingerprint during the enrollment process (after all enrollment steps are completed).
      

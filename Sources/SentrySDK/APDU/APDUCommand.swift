@@ -31,6 +31,9 @@ enum APDUCommand {
     /// Enrolls a fingerprint.
     static let processFingerprint: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x00, 0x01] // note: the last byte indicates the finger number; this will need updating if/when 2 fingers are supported
     
+    /// Enrolls a fingerprint and resets biometric data (used for restarting enrollment process).
+    static let restartEnrollAndProcessfingerprint: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x02, 0x01]
+    
     /// Verifies fingerprint enrollment.
     static let verifyFingerprintEnrollment: [UInt8] = [0x84, 0x59, 0x00, 0x00, 0x01, 0x00]
     
