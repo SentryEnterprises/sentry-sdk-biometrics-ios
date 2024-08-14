@@ -243,7 +243,7 @@ public class SentrySDK: NSObject {
         - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
         - stepFinished: A callback method that receives the current enrollment scan step that just finished, and the total number of steps required (i.e. scan two (2) out of the six (6) required). Callers should use this to update UI indicating the percentage completed.
         - enrollmentComplete: A callback method that is called after all enrollment steps are finished and the enrollment process is fully completed.
-        - withReset: `True` to erase all existing biometric data and start the entire enrollment process over, `false` to perform enrollment without resetting biometric data.
+        - withReset: `True` to erase all existing biometric data and start the entire enrollment process over, `false` to perform enrollment without resetting biometric data (defaults to `false`).
      
      This method can throw the following exceptions:
      * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
@@ -258,7 +258,7 @@ public class SentrySDK: NSObject {
     public func enrollFingerprint(connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void,
                                   stepFinished: (_ session: NFCReaderSession, _ currentStep: UInt8, _ totalSteps: UInt8) -> Void,
                                   enrollmentComplete: (_ session: NFCReaderSession) -> Void,
-                                  withReset: Bool) async throws {
+                                  withReset: Bool = false) async throws {
         var errorDuringSession = false
         var resetOnFirstCall = withReset
         
