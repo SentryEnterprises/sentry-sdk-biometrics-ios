@@ -78,6 +78,8 @@ final class BiometricsAPI {
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.secureChannelInitializationError` if `useSecureCommunication` is `true` but an error occurred initializing the secure communication encryption.
      * `SentrySDKError.secureCommunicationNotSupported` if `useSecureCommunication` is `true` but the version of the BioVerify applet on the SentryCard does nto support secure communication (highly unlikely).
+     * `SentrySDKError.bioVerifyAppletNotInstalled` if the BioVerify applet is not installed on the scanned SentryCard.
+     * `SentrySDKError.bioVerifyAppletWrongVersion` if the BioVerify applet installed on the SentryCard does not support data storage.
 
      */
     func initializeVerify(tag: NFCISO7816Tag) async throws {
@@ -87,9 +89,16 @@ final class BiometricsAPI {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
-        debugOutput += "     Selecting Verify Applet\n"
-        try await sendAndConfirm(apduCommand: APDUCommand.selectVerifyApplet, name: "Select Verify Applet", to: tag)
+        debugOutput += "     Insuring Verify Applet is Installed\n"
         
+        // make sure the Verify applet is installed or we cannot retrieve data
+        let verifyVersion = try await getVerifyAppletVersion(tag: tag)
+        if !verifyVersion.isInstalled {
+            throw SentrySDKError.bioverifyAppletNotInstalled
+        } else if verifyVersion.majorVersion <= 1 && verifyVersion.minorVersion < 3 {
+            throw SentrySDKError.bioVerifyAppletWrongVersion
+        }
+
 //        // use a secure channel, setup keys
 //        debugOutput += "     Initializing Secure Channel\n"
 //        
@@ -139,6 +148,9 @@ final class BiometricsAPI {
      
      This method can throw the following exceptions:
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet was unavailable for some reason.
+     * `SentrySDKError.cvmAppletBlocked` if the CVM applet is in a blocked state and can no longer be used.
+     * `SentrySDKError.cvmAppletError` if the CVM applet returned an unexpected error code.
 
      */
     func getVerifyStoredDataSecure(tag: NFCISO7816Tag, dataSlot: DataSlot) async throws -> FingerprintValidationAndData {
@@ -164,17 +176,29 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray.count > 0 {
-            if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
-                debugOutput += "     No Match\n------------------------------\n"
-                return FingerprintValidationAndData(doesFingerprintMatch: false, storedData: [])
-            } else {
-                debugOutput += "     Match\n------------------------------\n"
-                return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: dataArray)
+        if dataArray.count == 1 {
+            if returnData.data[0] == 0x00 {
+                throw SentrySDKError.cvmAppletNotAvailable
             }
+            
+            if returnData.data[0] == 0x01 {
+                throw SentrySDKError.cvmAppletBlocked
+            }
+            
+            if returnData.data[0] == 0xA5 {
+                debugOutput += "     Match\n------------------------------\n"
+                return FingerprintValidationAndData(doesFingerprintMatch: .matchValid, storedData: dataArray)
+            }
+
+            if returnData.data[0] == 0x5A {
+                debugOutput += "     No match found\n------------------------------\n"
+                return FingerprintValidationAndData(doesFingerprintMatch: .matchFailed, storedData: [])
+            }
+            
+            throw SentrySDKError.cvmAppletError(returnData.data[0])
         } else {
-            // we may have a match but nothing actually stored in the data slot
-            return FingerprintValidationAndData(doesFingerprintMatch: true, storedData: [])
+            debugOutput += "     Match\n------------------------------\n"
+            return FingerprintValidationAndData(doesFingerprintMatch: .matchValid, storedData: dataArray)
         }
     }
     
@@ -193,6 +217,9 @@ final class BiometricsAPI {
      This method can throw the following exceptions:
      * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
      * `SentrySDKError.dataSizeNotSupported` if the `data` parameter is larger than 255 bytes in size for the `.small` data slot, or 2048 bytes for the `.huge` data slot.
+     * `SentrySDKError.cvmAppletNotAvailable` if the CVM applet was unavailable for some reason.
+     * `SentrySDKError.cvmAppletBlocked` if the CVM applet is in a blocked state and can no longer be used.
+     * `SentrySDKError.cvmAppletError` if the CVM applet returned an unexpected error code.
 
      */
     func setVerifyStoredDataSecure(tag: NFCISO7816Tag, data: [UInt8], dataSlot: DataSlot) async throws -> Bool {
@@ -221,11 +248,27 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray[0] == 0x7D || dataArray[0] == 0x5A {
-            debugOutput += "     No Match\n------------------------------\n"
-            return false
+        if dataArray.count > 0 {
+            if returnData.data[0] == 0x00 {
+                throw SentrySDKError.cvmAppletNotAvailable
+            }
+            
+            if returnData.data[0] == 0x01 {
+                throw SentrySDKError.cvmAppletBlocked
+            }
+            
+            if returnData.data[0] == 0xA5 {
+                debugOutput += "     Match\n------------------------------\n"
+                return true
+            }
+
+            if returnData.data[0] == 0x5A {
+                debugOutput += "     No match found\n------------------------------\n"
+                return false
+            }
+            
+            throw SentrySDKError.cvmAppletError(returnData.data[0])
         } else {
-            debugOutput += "     Match\n------------------------------\n"
             return true
         }
     }
@@ -792,7 +835,7 @@ final class BiometricsAPI {
     func getVerifyAppletVersion(tag: NFCISO7816Tag) async throws -> VersionInfo {
         // Note: Due to the way Apple implemented APDU communication, it's possible to send a select command and receive a 9000 response
         // even though the applet isn't actually installed on the card. The BioVerify applet has always supported a versioning command,
-        // so here we'll simply check if the command was processes, and if we get an 'instruction byte not supported' response, we assume
+        // so here we'll simply check if the command was processed, and if we get an 'instruction byte not supported' response, we assume
         // the BioVerify applet isn't installed.
         
         var version = VersionInfo(isInstalled: false, majorVersion: -1, minorVersion: -1, hotfixVersion: -1, text: nil)
