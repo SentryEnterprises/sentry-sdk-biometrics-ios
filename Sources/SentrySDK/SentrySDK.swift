@@ -40,7 +40,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 9, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 9, hotfixVersion: 1, text: nil) }
     }
         
     
@@ -659,8 +659,8 @@ extension SentrySDK: NFCTagReaderSessionDelegate {
     public func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
         print("----- Tag Reader Session - Invalidated with error: \(error)")
         callback?(.failure(error))
-        self.session = nil
         callback = nil
+        self.session = nil
     }
     
     public func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {
@@ -679,6 +679,7 @@ extension SentrySDK: NFCTagReaderSessionDelegate {
         // make sure we have a tag, and that it's the right format
         guard let cardTag = tag, case let .iso7816(isoTag) = cardTag else {
             callback?(.failure(SentrySDKError.incorrectTagFormat))
+            callback = nil
             session.invalidate()
             return
         }
