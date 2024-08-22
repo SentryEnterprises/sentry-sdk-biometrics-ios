@@ -40,7 +40,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 10, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 10, hotfixVersion: 1, text: nil) }
     }
         
     
@@ -667,6 +667,7 @@ public class SentrySDK: NSObject {
 extension SentrySDK: NFCTagReaderSessionDelegate {
     public func tagReaderSessionDidBecomeActive(_ session: NFCTagReaderSession) {
         print("----- Tag Reader Session - Active")
+        connectedTag = nil
     }
 
     public func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
@@ -674,6 +675,7 @@ extension SentrySDK: NFCTagReaderSessionDelegate {
         callback?(.failure(error))
         callback = nil
         self.session = nil
+        connectedTag = nil
     }
     
     public func tagReaderSession(_ session: NFCTagReaderSession, didDetect tags: [NFCTag]) {

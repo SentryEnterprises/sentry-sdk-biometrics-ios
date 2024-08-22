@@ -248,7 +248,7 @@ final class BiometricsAPI {
         
         let dataArray = returnData.data.toArrayOfBytes()
         
-        if dataArray.count > 0 {
+        if dataArray.count == 1 {
             if returnData.data[0] == 0x00 {
                 throw SentrySDKError.cvmAppletNotAvailable
             }
