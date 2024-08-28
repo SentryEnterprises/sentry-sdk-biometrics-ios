@@ -7,7 +7,7 @@
 
 import Foundation
 import CoreNFC
-import Security
+import SentrySecurity
 
 public enum DataSlot {
     case small
