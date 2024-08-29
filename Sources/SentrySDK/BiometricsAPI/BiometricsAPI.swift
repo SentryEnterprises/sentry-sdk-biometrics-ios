@@ -703,6 +703,10 @@ final class BiometricsAPI {
         if dataBuffer[6] != 0x01 { throw SentrySDKError.cardOSVersionError }
         
         let n = dataBuffer[7]
+        
+        let stringArray = dataBuffer[8...8 + Int(n)]
+        let stringText = String(bytes: Array(stringArray), encoding: .ascii)
+        
         var p: Int = 8 + Int(n)
         
         if dataBuffer[p] != 0x9F { throw SentrySDKError.cardOSVersionError }
@@ -718,7 +722,7 @@ final class BiometricsAPI {
         p += 2
         let hotfix = dataBuffer[p] - 0x30
         
-        let retVal = VersionInfo(isInstalled: true, majorVersion: Int(major), minorVersion: Int(minor), hotfixVersion: Int(hotfix), text: nil)
+        let retVal = VersionInfo(isInstalled: true, majorVersion: Int(major), minorVersion: Int(minor), hotfixVersion: Int(hotfix), text: stringText)
                 
         debugOutput += "     Card OS Version: \(retVal.majorVersion).\(retVal.minorVersion).\(retVal.hotfixVersion)\n------------------------------\n"
         return retVal
