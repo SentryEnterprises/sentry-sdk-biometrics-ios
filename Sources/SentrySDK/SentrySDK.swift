@@ -22,12 +22,20 @@ public class SentrySDK: NSObject {
     private let enrollCode: [UInt8]
     private let biometricsAPI: BiometricsAPI
 
-    private var session: NFCReaderSession?
+    private var session: NFCTagReaderSession?
     private var connectedTag: NFCISO7816Tag?
     private var callback: ((Result<NFCISO7816Tag, Error>) -> Void)?
     
+    // This is associated with new experimental functionality
+    private var timer: Timer?
+    private var previousCardDetection: Bool = false
+    private var useCardDetection: Bool = false
+
     
     // MARK: - Public Properties
+    
+    /// EXPERIMENTAL - This functionality is not yet ready for production.
+    public var delegate: SentrySDKDelegate?
     
     /// Gets or sets the text displayed in the NFC scanning UI when an error occurs while communicating with the SentryCard..
     public var cardCommunicationErrorText = "An error occurred while communicating with the card."
@@ -40,7 +48,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 11, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 12, hotfixVersion: 0, text: nil) }
     }
         
     
@@ -55,10 +63,11 @@ public class SentrySDK: NSObject {
         - enrollCode: An array of `UInt8` bytes containing the enroll code digits. This array must be 4-6 bytes in length, and each byte must be in the range 0-9.
         - verboseDebugOutput: Indicates if verbose debug information is sent to the standard output log (defaults to `true`).
         - useSecureCommunication: Indicates if communication with the SentryCard is encrypted (defaults to `true`).
+        - useCardDetection: TEMPORARY parameter, set to `true` to use experimental card detection functionality (defaults to `false`)
      
      - Returns: A newly initialized `SentrySDK` object.
      */
-    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true) {
+    public init(enrollCode: [UInt8], verboseDebugOutput: Bool = true, useSecureCommunication: Bool = true, useCardDetection: Bool = false) {
         // NOTE: Will likely bring this back very soon.
         
 //        // sanity check - enroll code must be between 4 and 6 characters
@@ -72,6 +81,9 @@ public class SentrySDK: NSObject {
 //                throw SentrySDKError.enrollCodeDigitOutOfBounds
 //            }
 //        }
+        
+        // TEMPORARY
+        self.useCardDetection = useCardDetection
         
         self.enrollCode = enrollCode
         biometricsAPI = BiometricsAPI(verboseDebugOutput: verboseDebugOutput, useSecureCommunication: useSecureCommunication)
@@ -659,6 +671,30 @@ public class SentrySDK: NSObject {
             session?.begin()
         }
     }
+    
+    /// Handler for the card detection timer.
+    @objc private func fireTimer(timer: Timer) {
+        guard let connectedTag = connectedTag else {
+            print("----- Tag Reader Session - Tag Unavailable, terminating timer")
+            timer.invalidate()
+            return
+        }
+        
+        let isAvailable = connectedTag.isAvailable
+        
+        if previousCardDetection == false && isAvailable == true {
+            print("----- Tag Reader Session - Card is now available")
+            delegate?.cardDetectionChanged(cardIsDetected: true)
+        }
+        
+        if previousCardDetection == true && isAvailable == false {
+            print("----- Tag Reader Session - Card is no longer available")
+            delegate?.cardDetectionChanged(cardIsDetected: false)
+            session?.restartPolling()
+        }
+        
+        previousCardDetection = isAvailable
+    }
 }
 
 
@@ -708,6 +744,17 @@ extension SentrySDK: NFCTagReaderSessionDelegate {
                 self?.session?.invalidate()
             } else {
                 print("----- Tag Reader Session - Connection Made")
+                
+                if let strongSelf = self, strongSelf.connectedTag == nil, strongSelf.useCardDetection {
+                    print("----- Tag Reader Session - No Tag, Creating Timer")
+                    strongSelf.timer = Timer(timeInterval: 0.1, target: strongSelf, selector: #selector(strongSelf.fireTimer), userInfo: nil, repeats: true)
+                    
+                    if let timer = strongSelf.timer {
+                        print("----- Tag Reader Session - Starting Timer")
+                        RunLoop.main.add(timer, forMode: .common)
+                    }
+                }
+
                 self?.connectedTag = isoTag
                 self?.callback?(.success(isoTag))
                 self?.callback = nil
