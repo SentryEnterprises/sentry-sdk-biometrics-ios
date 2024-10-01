@@ -49,6 +49,9 @@ public enum SentrySDKError: Error {
     /// Indicates that the card could not match enrolled fingerprints with the finger on the sensor at the end of the enrollment process. This requires the user to restart enrollment.
     case enrollVerificationError
     
+    /// Indicates that the Enroll applet on the scanned card is not currently supported.
+    case unsupportedEnrollAppletVersion(Int)
+
     /// TEMPORARY
     case bioVerifyAppletWrongVersion
         

@@ -419,13 +419,31 @@ final class BiometricsAPI {
                 }
             }
             
-            debugOutput += "     Verifing Enroll Code\n"
-            var enrollCodeCommand = try APDUCommand.verifyEnrollCode(code: enrollCode)
-            enrollCodeCommand = try wrapAPDUCommand(apduCommand: enrollCodeCommand, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-            try await sendAndConfirm(apduCommand: enrollCodeCommand, name: "Verify Enroll Code", to: tag)
+            debugOutput += "     Getting Enroll Status"
+            let enrollStatusCommand = try wrapAPDUCommand(apduCommand: APDUCommand.getEnrollStatus, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            let returnData = try await send(apduCommand: enrollStatusCommand, name: "Get Enroll Status", to: tag)
+            
+            // we may need to send the verify enroll code command
+            if returnData.statusWord == APDUResponseCode.conditionOfUseNotSatisfied.rawValue {
+                debugOutput += "     Verifying Enroll Code\n"
+                var enrollCodeCommand = try APDUCommand.verifyEnrollCode(code: enrollCode)
+                enrollCodeCommand = try wrapAPDUCommand(apduCommand: enrollCodeCommand, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+                try await sendAndConfirm(apduCommand: enrollCodeCommand, name: "Verify Enroll Code", to: tag)
+            } else if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+                throw SentrySDKError.apduCommandError(returnData.statusWord)
+            }
+
         } else {
-            debugOutput += "     Verifing Enroll Code\n"
-            try await sendAndConfirm(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
+            debugOutput += "     Getting Enroll Status"
+            let returnData = try await send(apduCommand: APDUCommand.getEnrollStatus, name: "Get Enroll Status", to: tag)
+            
+            // we may need to send the verify enroll code command
+            if returnData.statusWord == APDUResponseCode.conditionOfUseNotSatisfied.rawValue {
+                debugOutput += "     Verifying Enroll Code\n"
+                try await sendAndConfirm(apduCommand: APDUCommand.verifyEnrollCode(code: enrollCode), name: "Verify Enroll Code", to: tag)
+            } else if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
+                throw SentrySDKError.apduCommandError(returnData.statusWord)
+            }
         }
         
         debugOutput += "------------------------------\n"
@@ -473,24 +491,51 @@ final class BiometricsAPI {
             throw SentrySDKError.enrollmentStatusBufferTooSmall
         }
         
-        // extract values from specific index in the array
-        let maxNumberOfFingers = dataArray[31]
-        let enrolledTouches = dataArray[32]
-        let remainingTouches = dataArray[33]
-        let mode = dataArray[39]
-        
-        debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     Enrolled Touches: \(enrolledTouches)\n     Remaining Touches: \(remainingTouches)\n     Mode: \(mode)\n"
-
-        let biometricMode: BiometricMode = mode == 0 ? .enrollment : .verification
-        
-        debugOutput += "------------------------------\n"
-        
-        return BiometricEnrollmentStatus(
-            maximumFingers: maxNumberOfFingers,
-            enrolledTouches: enrolledTouches,
-            remainingTouches: remainingTouches,
-            mode: biometricMode
-        )
+        // if we're dealing with Enroll app prior to 2.1
+        if dataArray[0] == 0 {
+            // extract values from specific index in the array
+            let maxNumberOfFingers = dataArray[31]
+            let enrolledTouches = dataArray[32]
+            let remainingTouches = dataArray[33]
+            let mode = dataArray[39]
+            
+            debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     Enrolled Touches: \(enrolledTouches)\n     Remaining Touches: \(remainingTouches)\n     Mode: \(mode)\n"
+            
+            let biometricMode: BiometricMode = mode == 0 ? .enrollment : .verification
+            
+            debugOutput += "------------------------------\n"
+            
+            return BiometricEnrollmentStatus(
+                maximumFingers: maxNumberOfFingers,
+                enrollmentByFinger: [FingerTouches(enrolledTouches: enrolledTouches, remainingTouches: remainingTouches)],
+                nextFingerToEnroll: 0,
+                mode: biometricMode
+            )
+        } else if dataArray[0] == 1 {
+            let maxNumberOfFingers = dataArray[31]
+            let finger1EnrolledTouches = dataArray[32]
+            let finger1RemainingTouches = dataArray[33]
+            let finger2EnrolledTouches = dataArray[40]
+            let finger2RemainingTouches = dataArray[41]
+            let nextFingerToEnroll = dataArray[49]
+            let mode = dataArray[50]
+            
+            debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     F1 Enrolled Touches: \(finger1EnrolledTouches)\n     F1 Remaining Touches: \(finger1RemainingTouches)\n     F2 Enrolled Touches: \(finger2EnrolledTouches)\n     F2 Remaining Touches: \(finger2RemainingTouches)\n     Next Finger: \(nextFingerToEnroll)\n     Mode: \(mode)\n"
+            
+            let biometricMode: BiometricMode = mode == 0 ? .enrollment : .verification
+            
+            debugOutput += "------------------------------\n"
+            
+            return BiometricEnrollmentStatus(
+                maximumFingers: maxNumberOfFingers,
+                enrollmentByFinger: [FingerTouches(enrolledTouches: finger1EnrolledTouches, remainingTouches: finger1RemainingTouches), FingerTouches(enrolledTouches: finger2EnrolledTouches, remainingTouches: finger2RemainingTouches)],
+                nextFingerToEnroll: nextFingerToEnroll,
+                mode: biometricMode
+            )
+        } else {
+            // throw unsupported Enroll applet version exception
+            throw SentrySDKError.unsupportedEnrollAppletVersion(Int(dataArray[0]))
+        }
     }
     
     /**
@@ -560,6 +605,8 @@ final class BiometricsAPI {
     func enrollScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
         var debugOutput = "----- BiometricsAPI Enroll Scan Fingerprint\n"
         
+        // TODO: Update 2 finger
+        
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
@@ -574,8 +621,8 @@ final class BiometricsAPI {
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
         
-        debugOutput += "     Remaining: \(enrollmentStatus.remainingTouches)\n------------------------------\n"
-        return enrollmentStatus.remainingTouches
+        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[0].remainingTouches)\n------------------------------\n"
+        return enrollmentStatus.enrollmentByFinger[0].remainingTouches
     }
     
     /**
@@ -596,6 +643,8 @@ final class BiometricsAPI {
     func resetEnrollAndScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
         var debugOutput = "----- BiometricsAPI Reset Enroll and Scan Fingerprint\n"
         
+        // TODO: Update 2 finger
+        
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
@@ -610,8 +659,8 @@ final class BiometricsAPI {
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
         
-        debugOutput += "     Remaining: \(enrollmentStatus.remainingTouches)\n------------------------------\n"
-        return enrollmentStatus.remainingTouches
+        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[0].remainingTouches)\n------------------------------\n"
+        return enrollmentStatus.enrollmentByFinger[0].remainingTouches
     }
 
     /**
