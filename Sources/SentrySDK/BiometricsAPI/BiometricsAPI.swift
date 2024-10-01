@@ -857,9 +857,15 @@ final class BiometricsAPI {
             
             if responseBuffer.count > 11 {
                 let string = String(bytes: responseBuffer, encoding: .ascii)
+                var versionString = ""
+                if let string = string {
+                    let allowed = CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "A"..."Z")).union(CharacterSet(charactersIn: "a"..."z")).union(CharacterSet(["-", "."]))
+                    versionString = String(string.unicodeScalars.filter(allowed.contains))
+                }
+
                 let majorVersion = Int(responseBuffer[10] - 0x30)
                 let minorVersion = Int(responseBuffer[12] - 0x30)
-                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: string)
+                version = VersionInfo(isInstalled: true, majorVersion: majorVersion, minorVersion: minorVersion, hotfixVersion: 0, text: versionString)
             }
         } catch {
             if (error as NSError).domain == "NFCError" && (error as NSError).code == 2 {
