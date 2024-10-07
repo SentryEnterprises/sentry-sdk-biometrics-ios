@@ -465,7 +465,7 @@ final class BiometricsAPI {
     func getEnrollmentStatus(tag: NFCISO7816Tag) async throws -> BiometricEnrollmentStatus {
         var debugOutput = "----- BiometricsAPI Get Enrollment Status\n"
         var dataArray: [UInt8] = []
-
+        
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
@@ -506,29 +506,68 @@ final class BiometricsAPI {
             debugOutput += "------------------------------\n"
             
             return BiometricEnrollmentStatus(
+                version: 0,
                 maximumFingers: maxNumberOfFingers,
-                enrollmentByFinger: [FingerTouches(enrolledTouches: enrolledTouches, remainingTouches: remainingTouches)],
-                nextFingerToEnroll: 0,
+                enrollmentByFinger: [FingerTouches(enrolledTouches: enrolledTouches, remainingTouches: remainingTouches, biometricMode: nil)],
+                nextFingerToEnroll: 1,
                 mode: biometricMode
             )
         } else if dataArray[0] == 1 {
             let maxNumberOfFingers = dataArray[31]
             let finger1EnrolledTouches = dataArray[32]
             let finger1RemainingTouches = dataArray[33]
+            let finger1TopupTouches = dataArray[34]
+            let finger1QualTouches = dataArray[35]
+            let finger1QualPasses = dataArray[36]
+            let finger1BioMode = dataArray[37]
+            let finger1TopupRemaining = dataArray[38]
+            let finger1TopupAttempts = dataArray[39]
             let finger2EnrolledTouches = dataArray[40]
             let finger2RemainingTouches = dataArray[41]
+            let finger2TopupTouches = dataArray[42]
+            let finger2QualTouches = dataArray[43]
+            let finger2QualPasses = dataArray[44]
+            let finger2BioMode = dataArray[45]
+            let finger2TopupRemaining = dataArray[46]
+            let finger2TopupAttempts = dataArray[47]
+            let reenrollAttempts = dataArray[48]
             let nextFingerToEnroll = dataArray[49]
             let mode = dataArray[50]
             
-            debugOutput += "     # Fingers: \(maxNumberOfFingers)\n     F1 Enrolled Touches: \(finger1EnrolledTouches)\n     F1 Remaining Touches: \(finger1RemainingTouches)\n     F2 Enrolled Touches: \(finger2EnrolledTouches)\n     F2 Remaining Touches: \(finger2RemainingTouches)\n     Next Finger: \(nextFingerToEnroll)\n     Mode: \(mode)\n"
+            debugOutput +=  "     # Fingers: \(maxNumberOfFingers)\n" +
+                            "     F1 Enrolled Touches: \(finger1EnrolledTouches)\n" +
+                            "     F1 Remaining Touches: \(finger1RemainingTouches)\n" +
+                            "     F1 Topup Touches: \(finger1TopupTouches)\n" +
+                            "     F1 Qual Touches: \(finger1QualTouches)\n" +
+                            "     F1 Qual Passed: \(finger1QualPasses)\n" +
+                            "     F1 Biometric Mode: \(finger1BioMode)\n" +
+                            "     F1 Topup Remaining: \(finger1TopupRemaining)\n" +
+                            "     F1 Topup Attempts: \(finger1TopupAttempts)\n" +
+                            "     F2 Enrolled Touches: \(finger2EnrolledTouches)\n" +
+                            "     F2 Remaining Touches: \(finger2RemainingTouches)\n" +
+                            "     F2 Topup Touches: \(finger2TopupTouches)\n" +
+                            "     F2 Qual Touches: \(finger2QualTouches)\n" +
+                            "     F2 Qual Passed: \(finger2QualPasses)\n" +
+                            "     F2 Biometric Mode: \(finger2BioMode)\n" +
+                            "     F2 Topup Remaining: \(finger2TopupRemaining)\n" +
+                            "     F2 Topup Attempts: \(finger2TopupAttempts)\n" +
+                            "     Reenroll Attempts: \(reenrollAttempts)\n" +
+                            "     Next Finger: \(nextFingerToEnroll)\n" +
+                            "     Mode: \(mode)\n"
             
-            let biometricMode: BiometricMode = mode == 0 ? .enrollment : .verification
+            // need to check all fingers
+            var biometricMode: BiometricMode = .enrollment
+            if finger1BioMode > 1 && finger2BioMode > 1 {
+                biometricMode = .verification
+            }
             
             debugOutput += "------------------------------\n"
             
             return BiometricEnrollmentStatus(
+                version: 1,
                 maximumFingers: maxNumberOfFingers,
-                enrollmentByFinger: [FingerTouches(enrolledTouches: finger1EnrolledTouches, remainingTouches: finger1RemainingTouches), FingerTouches(enrolledTouches: finger2EnrolledTouches, remainingTouches: finger2RemainingTouches)],
+                enrollmentByFinger: [FingerTouches(enrolledTouches: finger1EnrolledTouches, remainingTouches: finger1RemainingTouches, biometricMode: finger1BioMode),
+                                     FingerTouches(enrolledTouches: finger2EnrolledTouches, remainingTouches: finger2RemainingTouches, biometricMode: finger2BioMode)],
                 nextFingerToEnroll: nextFingerToEnroll,
                 mode: biometricMode
             )
@@ -595,34 +634,40 @@ final class BiometricsAPI {
      
      - Parameters:
         - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - fingerIndex: The index of the finger to enroll (must be either 1 or 2).
      
      - Returns: The number of required fingerprint scans remaining to complete enrollment.
      
+     - Note: The IDEX Enroll applet tracks the finger index starting at 1.
+     
      This method can throw the following exceptions:
       * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+      * `SentrySDKError.invalidFingerIndex` if the `fingerIndex` value is not either 1 or 2.
      
      */
-    func enrollScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
-        var debugOutput = "----- BiometricsAPI Enroll Scan Fingerprint\n"
+    func enrollScanFingerprint(tag: NFCISO7816Tag, fingerIndex: UInt8) async throws -> UInt8 {
+        if !(1...2).contains(Int(fingerIndex)) {
+            throw SentrySDKError.invalidFingerIndex
+        }
         
-        // TODO: Update 2 finger
+        var debugOutput = "----- BiometricsAPI Enroll Scan Fingerprint: \(fingerIndex)\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
         if useSecureChannel {
-            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.processFingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
-            try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Process Fingerprint", to: tag)
+            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.processFingerprint(fingerIndex: fingerIndex), keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Enroll Scan Fingerprint", to: tag)
         } else {
-            try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint, name: "Process Fingerprint", to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.processFingerprint(fingerIndex: fingerIndex), name: "Enroll Scan Fingerprint", to: tag)
         }
         
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
         
-        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[0].remainingTouches)\n------------------------------\n"
-        return enrollmentStatus.enrollmentByFinger[0].remainingTouches
+        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[Int(fingerIndex) - 1].remainingTouches)\n------------------------------\n"
+        return enrollmentStatus.enrollmentByFinger[Int(fingerIndex) - 1].remainingTouches
     }
     
     /**
@@ -633,34 +678,39 @@ final class BiometricsAPI {
      
      - Parameters:
         - tag: The `NFCISO7816` tag supplied by an NFC connection to which `APDU` commands are sent.
+        - fingerIndex: The index of the finger to enroll (must be either 1 or 2).
+
      
      - Returns: The number of required fingerprint scans remaining to complete enrollment.
      
      This method can throw the following exceptions:
       * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+      * `SentrySDKError.invalidFingerIndex` if the `fingerIndex` value is not either 1 or 2.
      
      */
-    func resetEnrollAndScanFingerprint(tag: NFCISO7816Tag) async throws -> UInt8 {
-        var debugOutput = "----- BiometricsAPI Reset Enroll and Scan Fingerprint\n"
+    func resetEnrollAndScanFingerprint(tag: NFCISO7816Tag, fingerIndex: UInt8) async throws -> UInt8 {
+        if !(1...2).contains(Int(fingerIndex)) {
+            throw SentrySDKError.invalidFingerIndex
+        }
         
-        // TODO: Update 2 finger
+        var debugOutput = "----- BiometricsAPI Reset Enroll and Scan Fingerprint: \(fingerIndex)\n"
         
         defer {
             if isDebugOutputVerbose { print(debugOutput) }
         }
         
         if useSecureChannel {
-            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.restartEnrollAndProcessfingerprint, keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
+            let processFingerprintCommand = try wrapAPDUCommand(apduCommand: APDUCommand.restartEnrollAndProcessFingerprint(fingerIndex: fingerIndex), keyENC: keyENC, keyCMAC: keyCMAC, chainingValue: &chainingValue, encryptionCounter: &encryptionCounter)
             try await sendAndConfirm(apduCommand: processFingerprintCommand, name: "Reset And Process Fingerprint", to: tag)
         } else {
-            try await sendAndConfirm(apduCommand: APDUCommand.restartEnrollAndProcessfingerprint, name: "Reset And Process Fingerprint", to: tag)
+            try await sendAndConfirm(apduCommand: APDUCommand.restartEnrollAndProcessFingerprint(fingerIndex: fingerIndex), name: "Reset And Process Fingerprint", to: tag)
         }
         
         debugOutput += "     Getting enrollment status\n"
         let enrollmentStatus = try await getEnrollmentStatus(tag: tag)
         
-        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[0].remainingTouches)\n------------------------------\n"
-        return enrollmentStatus.enrollmentByFinger[0].remainingTouches
+        debugOutput += "     Remaining: \(enrollmentStatus.enrollmentByFinger[Int(fingerIndex) - 1].remainingTouches)\n------------------------------\n"
+        return enrollmentStatus.enrollmentByFinger[Int(fingerIndex) - 1].remainingTouches
     }
 
     /**

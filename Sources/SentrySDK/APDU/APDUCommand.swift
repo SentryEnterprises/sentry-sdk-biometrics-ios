@@ -28,12 +28,6 @@ enum APDUCommand {
     /// Verifies that the finger on the sensor matches the one recorded during enrollment.
     static let getFingerprintVerify: [UInt8] = [0x80, 0xB6, 0x01, 0x00, 0x00]
     
-    /// Enrolls a fingerprint.
-    static let processFingerprint: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x00, 0x01] // note: the last byte indicates the finger number; this will need updating if/when 2 fingers are supported
-    
-    /// Enrolls a fingerprint and resets biometric data (used for restarting enrollment process).
-    static let restartEnrollAndProcessfingerprint: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x02, 0x01]
-    
     /// Verifies fingerprint enrollment.
     static let verifyFingerprintEnrollment: [UInt8] = [0x84, 0x59, 0x00, 0x00, 0x01, 0x00]
     
@@ -55,6 +49,20 @@ enum APDUCommand {
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]
     
+    /// Enrolls a fingerprint.
+    static func processFingerprint(fingerIndex: UInt8) -> [UInt8] {
+        var processFingerprintCommand: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x00]
+        processFingerprintCommand.append(fingerIndex)
+        return processFingerprintCommand
+    }
+    
+    /// Enrolls a fingerprint and resets biometric data (used for restarting enrollment process).
+    static func restartEnrollAndProcessFingerprint(fingerIndex: UInt8) -> [UInt8] {
+        var restartEnrollAndProcessFingerprintCommand: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x02]
+        restartEnrollAndProcessFingerprintCommand.append(fingerIndex)
+        return restartEnrollAndProcessFingerprintCommand
+    }
+
     /// Verifies the enroll code.
     static func verifyEnrollCode(code: [UInt8]) throws -> [UInt8] {
         var verifyCodeCommand: [UInt8] = [0x80, 0x20, 0x00, 0x80, 0x08]

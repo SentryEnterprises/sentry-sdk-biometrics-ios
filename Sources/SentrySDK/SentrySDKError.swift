@@ -52,6 +52,9 @@ public enum SentrySDKError: Error {
     /// Indicates that the Enroll applet on the scanned card is not currently supported.
     case unsupportedEnrollAppletVersion(Int)
 
+    /// The valid finger index values are currently 1 and 2.
+    case invalidFingerIndex
+
     /// TEMPORARY
     case bioVerifyAppletWrongVersion
         
