@@ -253,7 +253,8 @@ public class SentrySDK: NSObject {
                 if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue || 
                     errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue ||
                     errorCode == APDUResponseCode.poorImageQuality.rawValue ||
-                    errorCode == 102 {
+                    errorCode == 102 ||
+                    errorCode == 100 {
                     
                     if let session = session {
                         connectionDelegate?.connected(session: session, isConnected: false)
@@ -418,7 +419,11 @@ public class SentrySDK: NSObject {
                     errorCode = (error as NSError).code
                 }
                 
-                if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue || errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue || errorCode == APDUResponseCode.poorImageQuality.rawValue || errorCode == 102 {
+                if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue || 
+                    errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue ||
+                    errorCode == APDUResponseCode.poorImageQuality.rawValue ||
+                    errorCode == 102 ||
+                    errorCode == 100 {
                     if let session = session {
                         connectionDelegate?.connected(session: session, isConnected: false)
                     }
