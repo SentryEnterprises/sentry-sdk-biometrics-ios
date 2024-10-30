@@ -38,8 +38,18 @@ public enum APDUResponseCode: Int {
     case conditionOfUseNotSatisfied = 0x6985
     
     /// Checking errors - wrong parameters
+    case noInformationGiven = 0x6A00
+    case incorrectCommandParameters = 0x6A80
+    case functionNotSupported = 0x6A81
     case appletNotFound = 0x6A82
+    case recordNotFound = 0x6A83
     case notEnoughMemory = 0x6A84
+    case inconsistentWithTLV = 0x6A85
+    case incorrectParameters = 0x6A86
+    case inconsistentWithParameters = 0x6A87
+    case dataNotFound = 0x6A88
+    case fileAlreadyExists = 0x6A89
+    case nameAlreadyExists = 0x6A8A
     
     /// Checking errors - wrong parameters
     case wrongParameters = 0x6B00

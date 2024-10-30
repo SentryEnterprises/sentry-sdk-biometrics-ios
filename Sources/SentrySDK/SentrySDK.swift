@@ -46,7 +46,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 15, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 16, hotfixVersion: 0, text: nil) }
     }
         
     
@@ -115,6 +115,10 @@ public class SentrySDK: NSObject {
         do {
             // establish a connection
             let isoTag = try await establishConnection()
+            
+            if let session = session {
+                connectionDelegate?.connected(session: session, isConnected: true)
+            }
             
             // get card OS version
             let osVersion = try await biometricsAPI.getCardOSVersion(tag: isoTag)
@@ -342,8 +346,6 @@ public class SentrySDK: NSObject {
                 if enrollStatus.mode == .verification {
                     throw SentrySDKError.enrollModeNotAvailable
                 }
-                
-                // TODO: Update 2 finger
                 
                 // the next finger index
                 currentFinger = enrollStatus.nextFingerToEnroll
@@ -704,6 +706,10 @@ public class SentrySDK: NSObject {
             // establish a connection
             let isoTag = try await establishConnection()
             
+            if let session = session {
+                connectionDelegate?.connected(session: session, isConnected: true)
+            }
+
             // reset the biometric data, setting the card into an unenrolled state
             try await biometricsAPI.resetBiometricData(tag: isoTag)
        } catch (let error) {
