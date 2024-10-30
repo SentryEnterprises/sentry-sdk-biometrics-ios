@@ -354,88 +354,98 @@ public class SentrySDK: NSObject {
                 // the next finger index
                 currentFinger = enrollStatus.nextFingerToEnroll
                 
-                while (currentFinger - 1) < enrollStatus.maximumFingers {
-                    // calculate the required number of steps and update the NFC reader session UI
-                    let maxStepsForFinger = enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].enrolledTouches + enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
-                    
-                    // if we're resetting, assume we have not yet enrolled anything
-                    var enrollmentsLeft = resetOnFirstCall ? maxStepsForFinger : enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
-                    
-                    while enrollmentsLeft > 0 {
-                        // inform listeners about the current state of enrollment for this finger
-                        if let session = session {
-                            enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
-                        }
-                        
-                        // scan the finger currently on the sensor
-                        if resetOnFirstCall {
-                            enrollmentsLeft = try await biometricsAPI.resetEnrollAndScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
-                        } else {
-                            enrollmentsLeft = try await biometricsAPI.enrollScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
-                        }
-                        
-                        resetOnFirstCall = false
-                        
-                        // inform listeners of the step that just finished
-                        if let session = session {
-                            enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
-                        }
-                    }
-                    
-                    // inform listeners about the pending verification step
-                    if let session = session {
-                        enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger, totalSteps: maxStepsForFinger)
-                    }
-                    
-                    // after all fingerprints are enrolled, perform a verify
-                    do {
-                        try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
-                    } catch SentrySDKError.apduCommandError(let errorCode) {
-                        if errorCode == (APDUResponseCode.noMatchFound.rawValue) {
-                            // expose a custom error if the verify enrolled fingerprint command didn't find a match
-                            throw SentrySDKError.enrollVerificationError
-                        } else {
-                            throw SentrySDKError.apduCommandError(errorCode)
-                        }
-                    }
-                    
-                    // pause just a bit between fingers, if we're not on the last finger
-                    if currentFinger < enrollStatus.maximumFingers {
-                        if let session = session {
-                            enrollmentDelegate?.fingerTransition(session: session, nextFingerIndex: currentFinger + 1)
-                        }
-                        try await Task.sleep(nanoseconds: 2000000000)       // 2 seconds
-                    }
-                    
-                    currentFinger += 1
+                // calculate the required number of steps and update the NFC reader session UI
+                let maxStepsForFinger = enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].enrolledTouches + enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
+                
+                // if we're resetting, assume we have not yet enrolled anything
+                var enrollmentsLeft = resetOnFirstCall ? maxStepsForFinger : enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
+                
+                // inform listeners about the current state of enrollment for this finger
+                if let session = session {
+                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
                 }
                 
-                // enrollment is fully completed
+                while enrollmentsLeft > 0 {
+                    // scan the finger currently on the sensor
+                    if resetOnFirstCall {
+                        enrollmentsLeft = try await biometricsAPI.resetEnrollAndScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
+                    } else {
+                        enrollmentsLeft = try await biometricsAPI.enrollScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
+                    }
+                    
+                    resetOnFirstCall = false
+                    
+                    // inform listeners of the step that just finished
+                    if let session = session { //}, enrollmentsLeft > 0 {
+                        enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
+                    }
+                }
+                
+                // inform listeners about the pending verification step
                 if let session = session {
-                    enrollmentDelegate?.enrollmentComplete(session: session)
+                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger, totalSteps: maxStepsForFinger)
+                }
+                
+                // after all fingerprints are enrolled, perform a verify
+                do {
+                    try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                } catch SentrySDKError.apduCommandError(let errorCode) {
+                    if errorCode == (APDUResponseCode.noMatchFound.rawValue) {
+                        // expose a custom error if the verify enrolled fingerprint command didn't find a match
+                        throw SentrySDKError.enrollVerificationError
+                    } else {
+                        throw SentrySDKError.apduCommandError(errorCode)
+                    }
+                }
+                
+                if let session = session {
+                    if currentFinger < enrollStatus.maximumFingers {
+                        enrollmentDelegate?.fingerTransition(session: session, nextFingerIndex: currentFinger + 1)
+                    } else {
+                        enrollmentDelegate?.enrollmentComplete(session: session)
+                    }
                 }
                 isFinished = true
-                
             } catch (let error) {
+                
+                // TODO: Do not throw an error on poor image quality, or restart polling, simply report it and try again
+                
+                print("-- Error during enrollment: \(error)")
+                
                 var errorCode = 0
                 
+                if let readerError = error as? NFCReaderError {
+                    print("===== ReaderError: \(readerError.errorCode)")
+                }
+                
+                if let sdkError = error as? SentrySDKError {
+                    print("===== SDKError: \(sdkError)")
+                }
+                
                 if case let SentrySDKError.apduCommandError(code) = error {
+                    print("===== SDK Error Code: \(code)")
                     errorCode = code
                 } else {
                     errorCode = (error as NSError).code
+                    print("===== Error Code: \(errorCode)")
                 }
                 
-                if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue || 
+                if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue ||
                     errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue ||
                     errorCode == APDUResponseCode.poorImageQuality.rawValue ||
+                    errorCode == APDUResponseCode.userTimeoutExpired.rawValue ||
                     errorCode == 102 ||
                     errorCode == 100 {
+                    
+                    print("-- Restarting polling")
+                    
                     if let session = session {
                         connectionDelegate?.connected(session: session, isConnected: false)
                     }
-
+                    
                     isReconnect = true
                 } else {
+                    print("-- Actual error, exiting")
                     errorDuringSession = true
                     isFinished = true
                     throw error
