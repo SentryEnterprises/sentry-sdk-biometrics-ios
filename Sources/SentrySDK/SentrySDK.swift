@@ -171,6 +171,10 @@ public class SentrySDK: NSObject {
             // establish a connection
             let isoTag = try await establishConnection()
             
+            if let session = session {
+                connectionDelegate?.connected(session: session, isConnected: true)
+            }
+            
             // initialize the Enroll applet
             try await biometricsAPI.initializeEnroll(tag: isoTag, enrollCode: enrollCode)
             
