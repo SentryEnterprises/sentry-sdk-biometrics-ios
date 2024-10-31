@@ -252,13 +252,13 @@ public class SentrySDK: NSObject {
                 }
             } catch SentrySDKError.cvmErrorNoMatchPerformed {
                 if cvmErrorCount < 3 {
+                    cvmErrorCount += 1
+                    isReconnect = true
+                } else {
                     if let session = session {
                         connectionDelegate?.connected(session: session, isConnected: false)
                     }
                     
-                    cvmErrorCount += 1
-                    isReconnect = true
-                } else {
                     errorDuringSession = true
                     isFinished = true
                     throw SentrySDKError.cvmErrorNoMatchPerformed
