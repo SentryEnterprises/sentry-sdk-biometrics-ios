@@ -58,7 +58,7 @@ enum APDUCommand {
     
     /// Enrolls a fingerprint and resets biometric data (used for restarting enrollment process).
     static func restartEnrollAndProcessFingerprint(fingerIndex: UInt8) -> [UInt8] {
-        var restartEnrollAndProcessFingerprintCommand: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x02]
+        var restartEnrollAndProcessFingerprintCommand: [UInt8] = [0x84, 0x59, 0x03, 0x00, 0x02, 0x06]
         restartEnrollAndProcessFingerprintCommand.append(fingerIndex)
         return restartEnrollAndProcessFingerprintCommand
     }
