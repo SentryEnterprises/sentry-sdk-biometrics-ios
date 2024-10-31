@@ -1279,7 +1279,7 @@ final class BiometricsAPI {
     /// Sends an APDU command, throwing an exception if that command does not respond with a successful operation value.
     @discardableResult private func sendAndConfirm(apduCommand: [UInt8], name: String? = nil, to tag: NFCISO7816Tag) async throws -> APDUReturnResult {
         let returnData = try await send(apduCommand: apduCommand, name: name, to: tag)
-        
+                
         if returnData.statusWord != APDUResponseCode.operationSuccessful.rawValue {
             throw SentrySDKError.apduCommandError(returnData.statusWord)
         }
@@ -1297,6 +1297,7 @@ final class BiometricsAPI {
 
         let data = Data(apduCommand)
         debugOutput += "     >>> Sending => \(data.toHex())\n"
+        print("Immediate >>> Sending => \(data.toHex())\n")
         
         guard let command = NFCISO7816APDU(data: data) else {
             throw SentrySDKError.invalidAPDUCommand
@@ -1306,6 +1307,7 @@ final class BiometricsAPI {
         
         let resultData = result.0 + Data([result.1]) + Data([result.2])
         debugOutput += "     <<< Received <= \(resultData.toHex())\n"
+        print("Immediate <<< Received <= \(resultData.toHex())\n")
         
         let statusWord: Int = Int(result.1) << 8 + Int(result.2)
         return APDUReturnResult(data: result.0, statusWord: statusWord)

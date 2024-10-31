@@ -450,6 +450,10 @@ public class SentrySDK: NSObject {
                     print("===== Error Code: \(errorCode)")
                 }
                 
+                if !(session?.isReady ?? false) {
+                    throw NFCReaderError(NFCReaderError.readerSessionInvalidationErrorUserCanceled)
+                }
+                
                 if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue ||
                     errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue ||
                     errorCode == APDUResponseCode.poorImageQuality.rawValue ||
