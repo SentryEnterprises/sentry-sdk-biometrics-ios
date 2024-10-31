@@ -1002,6 +1002,9 @@ final class BiometricsAPI {
     
     /// Encodes an APDU command.
     private func wrapAPDUCommand(apduCommand: [UInt8], keyENC: [UInt8], keyCMAC: [UInt8], chainingValue: inout [UInt8], encryptionCounter: inout [UInt8]) throws -> [UInt8] {
+        let data = Data(apduCommand)
+        print("     >>> Wrapping => \(data.toHex())\n")
+
         let command = UnsafeMutablePointer<UInt8>.allocate(capacity: apduCommand.count)
         let wrappedCommand = UnsafeMutablePointer<UInt8>.allocate(capacity: 300)
         let ENC = UnsafeMutablePointer<UInt8>.allocate(capacity: keyENC.count)
