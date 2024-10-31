@@ -185,6 +185,10 @@ final class BiometricsAPI {
                 throw SentrySDKError.cvmAppletBlocked
             }
             
+            if returnData.data[0] == 0x7D {
+                throw SentrySDKError.cvmErrorNoMatchPerformed            }
+
+            
             if returnData.data[0] == 0xA5 {
                 debugOutput += "     Match\n------------------------------\n"
                 return FingerprintValidationAndData(doesFingerprintMatch: .matchValid, storedData: dataArray)
@@ -257,6 +261,10 @@ final class BiometricsAPI {
                 throw SentrySDKError.cvmAppletBlocked
             }
             
+            if returnData.data[4] == 0x7D {
+                throw SentrySDKError.cvmErrorNoMatchPerformed
+            }
+
             if returnData.data[0] == 0xA5 {
                 debugOutput += "     Match\n------------------------------\n"
                 return true
@@ -611,6 +619,10 @@ final class BiometricsAPI {
             
             if returnData.data[5] == 0x01 {
                 throw SentrySDKError.cvmAppletBlocked
+            }
+            
+            if returnData.data[4] == 0x7D {
+                throw SentrySDKError.cvmErrorNoMatchPerformed
             }
             
             if returnData.data[4] == 0xA5 {

@@ -212,6 +212,7 @@ public class SentrySDK: NSObject {
         var errorDuringSession = false
         var isReconnect = false
         var isFinished = false
+        var cvmErrorCount = 0
         
         defer {
             // closes the NFC reader session
@@ -249,7 +250,20 @@ public class SentrySDK: NSObject {
                     // otherwise, this card isn't enrolled and a validation cannot be performed
                     return .notEnrolled
                 }
-            } catch (let error) {
+            } catch SentrySDKError.cvmErrorNoMatchPerformed {
+                if cvmErrorCount < 3 {
+                    if let session = session {
+                        connectionDelegate?.connected(session: session, isConnected: false)
+                    }
+                    
+                    cvmErrorCount += 1
+                    isReconnect = true
+                } else {
+                    errorDuringSession = true
+                    isFinished = true
+                    throw SentrySDKError.cvmErrorNoMatchPerformed
+                }
+            } catch {
                 var errorCode = 0
                 
                 if case let SentrySDKError.apduCommandError(code) = error {
@@ -362,7 +376,7 @@ public class SentrySDK: NSObject {
                 
                 // inform listeners about the current state of enrollment for this finger
                 if let session = session {
-                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
+                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger, isNewTouch: false)
                 }
                 
                 while enrollmentsLeft > 0 {
@@ -377,13 +391,13 @@ public class SentrySDK: NSObject {
                     
                     // inform listeners of the step that just finished
                     if let session = session { //}, enrollmentsLeft > 0 {
-                        enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger)
+                        enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger, isNewTouch: true)
                     }
                 }
                 
                 // inform listeners about the pending verification step
                 if let session = session {
-                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger, totalSteps: maxStepsForFinger)
+                    enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger, totalSteps: maxStepsForFinger, isNewTouch: false)
                 }
                 
                 // after all fingerprints are enrolled, perform a verify
@@ -568,6 +582,8 @@ public class SentrySDK: NSObject {
      */
     public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> FingerprintValidation {
         var errorDuringSession = false
+        var cvmErrorCount = 0
+        
         defer {
             // closes the NFC reader session
             if errorDuringSession {
@@ -615,6 +631,20 @@ public class SentrySDK: NSObject {
                 // otherwise, this card isn't enrolled and a validation cannot be performed
                 return .notEnrolled
             }
+//        } catch SentrySDKError.cvmErrorNoMatchPerformed {
+//            if cvmErrorCount < 3 {
+//                if let session = session {
+//                    connectionDelegate?.connected(session: session, isConnected: false)
+//                }
+//                
+//                cvmErrorCount += 1
+//                print("========= CVM Count: \(cvmErrorCount)")
+//                isReconnect = true
+//            } else {
+//                errorDuringSession = true
+//                isFinished = true
+//                throw SentrySDKError.cvmErrorNoMatchPerformed
+//            }
         } catch (let error) {
             errorDuringSession = true
             if let session = session {

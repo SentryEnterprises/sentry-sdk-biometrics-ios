@@ -52,5 +52,5 @@ public protocol SentrySDKEnrollmentDelegate {
         - currentStep: The current enrollment step (or touch). Starts at `0`.
         - totalSteps: The total number of steps (or touches) required to enroll the finger.
      */
-    func enrollmentStatus(session: NFCReaderSession, currentFingerIndex: UInt8, currentStep: UInt8, totalSteps: UInt8)
+    func enrollmentStatus(session: NFCReaderSession, currentFingerIndex: UInt8, currentStep: UInt8, totalSteps: UInt8, isNewTouch: Bool)
 }

@@ -37,6 +37,9 @@ public enum SentrySDKError: Error {
     /// The CVM applet on the SentryCard is blocked, and the SentryCard will need a reset.
     case cvmAppletBlocked
     
+    /// The CVM applet did not perform a match (i.e. the user never touched the sensor, or there was some other error).
+    case cvmErrorNoMatchPerformed
+    
     /// The BioVerify applet is not installed on the SentryCard.
     case bioverifyAppletNotInstalled
     
