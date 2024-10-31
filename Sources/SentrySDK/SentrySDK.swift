@@ -214,15 +214,21 @@ public class SentrySDK: NSObject {
         var isFinished = false
         var cvmErrorCount = 0
         
+        print("*** Validate Fingerprint")
+        
         defer {
+            print("*** Validate Fingerprint - Defer")
+            
             // closes the NFC reader session
             if errorDuringSession {
+                print("*** Validate Fingerprint - Error during session")
                 session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
+                print("*** Validate Fingerprint - No error duing session")
                 session?.invalidate()
             }
         }
-        
+                
         while !isFinished {
             do {
                 // establish a connection
@@ -736,18 +742,23 @@ public class SentrySDK: NSObject {
 
      */
     public func resetCard() async throws {
+        print("*** Reset Card")
         var errorDuringSession = false
         defer {
+            print("*** Reset Card - Defer")
             // closes the NFC reader session
             if errorDuringSession {
+                print("*** Reset Card - Error during session")
                 session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
+                print("*** Reset Card - No Error During Session")
                 session?.invalidate()
             }
         }
         
         do {
             // establish a connection
+            print("*** Reset Card - Creating Connection")
             let isoTag = try await establishConnection()
             
             if let session = session {
@@ -755,8 +766,10 @@ public class SentrySDK: NSObject {
             }
 
             // reset the biometric data, setting the card into an unenrolled state
+            print("*** Reset Card - Reset data")
             try await biometricsAPI.resetBiometricData(tag: isoTag)
        } catch (let error) {
+           print("*** Reset Card - Error: \(error)")
             errorDuringSession = true
             throw error
         }
@@ -791,16 +804,20 @@ public class SentrySDK: NSObject {
             callback = { result in
                 switch result {
                 case .success(let tag):
+                    print("=== CALLBACK SUCCESS")
                     continuation.resume(returning: tag)
                 case .failure(let error):
+                    print("=== CALLBACK ERROR: \(error)")
                     continuation.resume(throwing: error)
                 }
             }
 
             // start the NFC reader session
             if let session = session, reconnect {
+                print("-- Restart Polling")
                 session.restartPolling()
             } else {
+                print("-- Creating new session")
                 session = NFCTagReaderSession(pollingOption: .iso14443, delegate: self)
                 session?.alertMessage = establishConnectionText
                 session?.begin()
@@ -819,8 +836,20 @@ extension SentrySDK: NFCTagReaderSessionDelegate {
     }
 
     public func tagReaderSession(_ session: NFCTagReaderSession, didInvalidateWithError error: Error) {
+        if let selfSession = self.session, selfSession != session {
+            print("----- Tag Reader Session - Invalidated different session, self: \(selfSession), invalidate: \(session)")
+            return
+        }
+        
         print("----- Tag Reader Session - Invalidated with error: \(error)")
-        callback?(.failure(error))
+        
+        if let callback = callback {
+            print("----- Tag Reader Session - Have callback, sending failure")
+            callback(.failure(error))
+        } else {
+            print("----- Tag Reader Session - NO callback")
+        }
+        
         callback = nil
         self.session = nil
         connectedTag = nil
