@@ -46,7 +46,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 16, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 17, hotfixVersion: 0, text: nil) }
     }
         
     
