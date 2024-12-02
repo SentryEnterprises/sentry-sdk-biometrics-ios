@@ -34,6 +34,9 @@ public class SentrySDK: NSObject {
     
     /// The object that acts as the enrollment delegate for the `SentrySDK`.
     public var enrollmentDelegate: SentrySDKEnrollmentDelegate?
+    
+    /// The object that acts as the fingerprint verification delegate for the `SentrySDK`.
+    public var verificationDelegate: SentrySDKFingerprintVerificationDelegate?
 
     /// Gets or sets the text displayed in the NFC scanning UI when an error occurs while communicating with the SentryCard..
     public var cardCommunicationErrorText = "An error occurred while communicating with the card."
@@ -46,7 +49,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 17, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 18, hotfixVersion: 0, text: nil) }
     }
         
     
@@ -214,17 +217,11 @@ public class SentrySDK: NSObject {
         var isFinished = false
         var cvmErrorCount = 0
         
-        print("*** Validate Fingerprint")
-        
         defer {
-            print("*** Validate Fingerprint - Defer")
-            
             // closes the NFC reader session
             if errorDuringSession {
-                print("*** Validate Fingerprint - Error during session")
                 session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
-                print("*** Validate Fingerprint - No error duing session")
                 session?.invalidate()
             }
         }
@@ -247,6 +244,10 @@ public class SentrySDK: NSObject {
                 if status.mode == .verification {
                     // initialize the BioVerify applet
                     try await biometricsAPI.initializeVerify(tag: isoTag)
+                    
+                    if let session = session {
+                        verificationDelegate?.awaitingFingerprint(session: session)
+                    }
                     
                     // perform a biometric fingerprint verification
                     let result = try await biometricsAPI.getFingerprintVerification(tag: isoTag)
@@ -479,6 +480,211 @@ public class SentrySDK: NSObject {
     }
     
     /**
+     Performs the enrollment process if the card is not currently enrolled, and stores data securely  in the appropriate data slot for the size of data passed (if any).
+     The user must scan their finger a number of times as dictated by the current enrollment status, typically six (6) times total. If enrollment was
+     interrupted, the process starts where it left off (i.e. if six (6) scans are required and three (3) scans were previously completed, only three (3) more will be performed). This method
+     updates the user via the NFC scanning UI, but includes callbacks allowing the caller to update additional UI indicating the enrollment progress.
+     
+     This process waits up to five (5) seconds for a finger to be pressed against the sensor. This timeout is (currently) not configurable. If a finger is not detected on the sensor within the
+     timeout period, a `SentrySDKError.apduCommandError` is thrown, indicating either a user timeout expiration (0x6748) or a host interface timeout expiration (0x6749).
+     
+     One (1) and two (2) finger enrollments are supported. For two finger enrollment, the Sentry Card must contain Enroll applet 2.1 or later. This method automatically detects how many
+     fingers are supported by the Sentry Card and behaves accordingly.
+     
+     During enrollment, this method calls the `connected(session:isConnected)` method of the `connectionDelegate` when a Sentry Card is detected and a connection is
+     made with the applets on the card, and when the Sentry Card is moved out of position and the mobile app can no longer communicate with the card. As each finger is enrolled, the
+     `enrollmentStatus(session:currentFingerIndex:currentStep:totalSteps)` method of the `enrollmentDelegate` is called so the mobile app can update the UI
+     to indicate progress. When enrolling multiple fingers, the `fingerTransition(session:nextFingerIndex)` method of the `enrollmentDelegate` is called once a finger
+     is enrolled and the next finger is ready. After all fingers are fully enrolled, the `enrollmentComplete(session)` method of the `enrollmentDelegate` is called to indicate that
+     enrollment of all fingers is completed.
+
+     Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
+     
+     - Note: If this method throws the `SentrySDKError.enrollVerificationError`, it means that the card could not verify that the finger on the sensor during the last enrollment
+     step matches the fingerprints recorded during the enrollment process (for example, a user presses their thumb on the sensor for 5 touches, and then on the last touch they use their index
+     finger). If this happens, the calling application must call this method again, setting the `withReset` parameter to `true`. This deletes all recorded biometric data and performs the
+     entire process again from the start.
+     
+     - Parameters:
+        - withReset: `True` to erase all existing biometric data and start the entire enrollment process over, `false` to perform enrollment without resetting biometric data (defaults to `false`).
+     
+     This method can throw the following exceptions:
+     * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
+     * `SentrySDKError.apduCommandError` that contains the status word returned by the last failed `APDU` command.
+     * `SentrySDKError.enrollCodeDigitOutOfBounds` if an enroll code digit is not in the range 0-9.
+     * `SentrySDKError.incorrectTagFormat` if an NFC session scanned a tag, but it is not an ISO7816 tag.
+     * `SentrySDKError.enrollModeNotAvailable` if the SentryCard is already enrolled and is in verification state.
+     * `SentrySDKError.enrollVerificationError` if the card could not verify that the last finger touch matches the fingerprints recorded during enrollment (requires a restart of the enrollment process).
+     * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
+    
+     */
+    public func enrollFingerprintIfNotEnrolled(withReset: Bool = false, andStoreData: [UInt8]?) async throws {
+        var errorDuringSession = false
+        var resetOnFirstCall = withReset
+        var isFinished = false
+        var isReconnect = false
+        var currentFinger: UInt8 = 1           // this counts from 1 in the IDEX Enroll applet
+                
+        // throw an error if the caller is passing more than the allowed maximum size of stored data
+        if let dataToStore = andStoreData, dataToStore.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
+            throw SentrySDKError.dataSizeNotSupported
+        }
+
+        defer {
+            // closes the NFC reader session
+            if errorDuringSession {
+                session?.invalidate(errorMessage: cardCommunicationErrorText)
+            } else {
+                session?.invalidate()
+            }
+        }
+        
+        while !isFinished {
+            do {
+                let isoTag = try await establishConnection(reconnect: isReconnect)
+                
+                if let session = session {
+                    connectionDelegate?.connected(session: session, isConnected: true)
+                }
+                
+                // initialize the Enroll applet
+                try await biometricsAPI.initializeEnroll(tag: isoTag, enrollCode: enrollCode)
+                
+                // get the current enrollment status
+                let enrollStatus = try await biometricsAPI.getEnrollmentStatus(tag: isoTag)
+                
+                // if this card is in enroll mode, enroll fingerprints
+                if enrollStatus.mode == .enrollment {
+                    // the next finger index
+                    currentFinger = enrollStatus.nextFingerToEnroll
+                    
+                    while (currentFinger - 1) < enrollStatus.maximumFingers {
+                        // calculate the required number of steps and update the NFC reader session UI
+                        let maxStepsForFinger = enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].enrolledTouches + enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
+                        
+                        // if we're resetting, assume we have not yet enrolled anything
+                        var enrollmentsLeft = resetOnFirstCall ? maxStepsForFinger : enrollStatus.enrollmentByFinger[Int(currentFinger) - 1].remainingTouches
+                        
+                        // inform listeners about the current state of enrollment for this finger
+                        if let session = session {
+                            enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger, isNewTouch: false)
+                        }
+                        
+                        while enrollmentsLeft > 0 {
+                            // scan the finger currently on the sensor
+                            if resetOnFirstCall {
+                                enrollmentsLeft = try await biometricsAPI.resetEnrollAndScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
+                            } else {
+                                enrollmentsLeft = try await biometricsAPI.enrollScanFingerprint(tag: isoTag, fingerIndex: currentFinger)
+                            }
+                            
+                            resetOnFirstCall = false
+                            
+                            // inform listeners of the step that just finished
+                            if let session = session {
+                                enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger - enrollmentsLeft, totalSteps: maxStepsForFinger, isNewTouch: true)
+                            }
+                        }
+                        
+                        // inform listeners about the pending verification step
+                        if let session = session {
+                            enrollmentDelegate?.enrollmentStatus(session: session, currentFingerIndex: currentFinger, currentStep: maxStepsForFinger, totalSteps: maxStepsForFinger, isNewTouch: false)
+                        }
+                        
+                        // after all fingerprints are enrolled, perform a verify
+                        do {
+                            try await biometricsAPI.verifyEnrolledFingerprint(tag: isoTag)
+                        } catch SentrySDKError.apduCommandError(let errorCode) {
+                            if errorCode == (APDUResponseCode.noMatchFound.rawValue) {
+                                // expose a custom error if the verify enrolled fingerprint command didn't find a match
+                                throw SentrySDKError.enrollVerificationError
+                            } else {
+                                throw SentrySDKError.apduCommandError(errorCode)
+                            }
+                        }
+                        
+                        currentFinger += 1
+                    }
+                }
+                
+                // if we're also storing data, store the data securely
+                if let dataToStore = andStoreData {
+                    let slot: DataSlot = dataToStore.count > 255 ? .huge : .small
+                    
+                    // initialize the BioVerify applet
+                    try await biometricsAPI.initializeVerify(tag: isoTag)
+                    
+                    if let session = session {
+                        verificationDelegate?.awaitingFingerprint(session: session)
+                    }
+
+                    // store the data
+                    let result = try await biometricsAPI.setVerifyStoredDataSecure(tag: isoTag, data: dataToStore, dataSlot: slot)
+                    
+                    if !result {
+                        throw SentrySDKError.apduCommandError(APDUResponseCode.noMatchFound.rawValue)
+                    }
+                }
+                
+                // enrollment is fully completed
+                if let session = session {
+                    enrollmentDelegate?.enrollmentComplete(session: session)
+                }
+
+                isFinished = true
+            } catch (let error) {
+                
+                // TODO: Do not throw an error on poor image quality, or restart polling, simply report it and try again
+                
+                print("-- Error during enrollment: \(error)")
+                
+                var errorCode = 0
+                
+                if let readerError = error as? NFCReaderError {
+                    print("===== ReaderError: \(readerError.errorCode)")
+                }
+                
+                if let sdkError = error as? SentrySDKError {
+                    print("===== SDKError: \(sdkError)")
+                }
+                
+                if case let SentrySDKError.apduCommandError(code) = error {
+                    print("===== SDK Error Code: \(code)")
+                    errorCode = code
+                } else {
+                    errorCode = (error as NSError).code
+                    print("===== Error Code: \(errorCode)")
+                }
+                
+                if !(session?.isReady ?? false) {
+                    throw NFCReaderError(NFCReaderError.readerSessionInvalidationErrorUserCanceled)
+                }
+                
+                if errorCode == APDUResponseCode.hostInterfaceTimeoutExpired.rawValue ||
+                    errorCode == APDUResponseCode.noPreciseDiagnosis.rawValue ||
+                    errorCode == APDUResponseCode.poorImageQuality.rawValue ||
+                    errorCode == APDUResponseCode.userTimeoutExpired.rawValue ||
+                    errorCode == 102 ||
+                    errorCode == 100 {
+                    
+                    print("-- Restarting polling")
+                    
+                    if let session = session {
+                        connectionDelegate?.connected(session: session, isConnected: false)
+                    }
+                    
+                    isReconnect = true
+                } else {
+                    print("-- Actual error, exiting")
+                    errorDuringSession = true
+                    isFinished = true
+                    throw error
+                }
+            }
+        }
+    }
+    
+    /**
      Writes up to 255 bytes of data to the small data slot on the SentryCard.
      
      Opens an `NFCReaderSession`, connects to an `NFCISO7816Tag` through this session, and sends `APDU` commands to a java applet running on the connected SentryCard.
@@ -575,7 +781,6 @@ public class SentrySDK: NSObject {
      - Parameters:
         - dataToStore: An array of `UInt8`bytes to write to the indicated data slot.
         - dataSlot: The data slot to which the data is written.
-        - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
      
      - Returns: `FingerprintValidation.matchValid` if the scanned fingerprint matches the one recorded during enrollment. If there is a successful match, the indicated data is written to the indicated data slot. Otherwise, returns  `FingerprintValidation.matchFailed` if the scanned fingeprrint does not match, and `FingerprintValidation.notEnrolled` if the card is in verification mode (i.e. the card is not enrolled and thus a fingerprint validation could not be performed).
      
@@ -590,9 +795,8 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
 
      */
-    public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> FingerprintValidation {
+    public func storeDataSecure(dataToStore: [UInt8], dataSlot: DataSlot) async throws -> FingerprintValidation {
         var errorDuringSession = false
-        var cvmErrorCount = 0
         
         defer {
             // closes the NFC reader session
@@ -620,7 +824,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             if let session = session {
-                connected(session, true)
+                connectionDelegate?.connected(session: session, isConnected: true)
             }
 
             // initialize the Enroll applet
@@ -633,6 +837,10 @@ public class SentrySDK: NSObject {
                 // initialize the BioVerify applet
                 try await biometricsAPI.initializeVerify(tag: isoTag)
 
+                if let session = session {
+                    verificationDelegate?.awaitingFingerprint(session: session)
+                }
+
                 // store the data
                 let result = try await biometricsAPI.setVerifyStoredDataSecure(tag: isoTag, data: dataToStore, dataSlot: dataSlot)
                 
@@ -641,24 +849,10 @@ public class SentrySDK: NSObject {
                 // otherwise, this card isn't enrolled and a validation cannot be performed
                 return .notEnrolled
             }
-//        } catch SentrySDKError.cvmErrorNoMatchPerformed {
-//            if cvmErrorCount < 3 {
-//                if let session = session {
-//                    connectionDelegate?.connected(session: session, isConnected: false)
-//                }
-//                
-//                cvmErrorCount += 1
-//                print("========= CVM Count: \(cvmErrorCount)")
-//                isReconnect = true
-//            } else {
-//                errorDuringSession = true
-//                isFinished = true
-//                throw SentrySDKError.cvmErrorNoMatchPerformed
-//            }
         } catch (let error) {
             errorDuringSession = true
             if let session = session {
-                connected(session, false)
+                connectionDelegate?.connected(session: session, isConnected: false)
             }
             throw error
         }
@@ -673,7 +867,6 @@ public class SentrySDK: NSObject {
      
      - Parameters:
         - dataSlot: The data slot from which data is retrieved.
-        - connected: A callback method that receives an `NFCReaderSession` and a boolean value. The `NFCReaderSession` allows the caller to update the NFC UI to indicate state. The boolean value is `true` when an NFC connection is made and an ISO7816 tag is detected, and `false` when the connection is dropped.
      
      - Returns: A `FingerprintValidationAndData` structure indicating if the finger on the sensor matches the fingerprint recorded during enrollment. If there is a successful match, this structure also contains the data stored in the indicated data slot. The `.small` data slot returns up to 255 bytes of data. The `.huge` data slot returns up to 2048 bytes of data.
      
@@ -687,7 +880,7 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
 
      */
-    public func retrieveDataSecure(dataSlot: DataSlot, connected: (_ session: NFCReaderSession, _ isConnected: Bool) -> Void) async throws -> FingerprintValidationAndData {
+    public func retrieveDataSecure(dataSlot: DataSlot) async throws -> FingerprintValidationAndData {
         var errorDuringSession = false
         defer {
             // closes the NFC reader session
@@ -703,7 +896,7 @@ public class SentrySDK: NSObject {
             let isoTag = try await establishConnection()
             
             if let session = session {
-                connected(session, true)
+                connectionDelegate?.connected(session: session, isConnected: true)
             }
 
             // initialize the Enroll applet
@@ -716,6 +909,10 @@ public class SentrySDK: NSObject {
                 // initialize the BioVerify applet
                 try await biometricsAPI.initializeVerify(tag: isoTag)
 
+                if let session = session {
+                    verificationDelegate?.awaitingFingerprint(session: session)
+                }
+
                 // store the data
                 return try await biometricsAPI.getVerifyStoredDataSecure(tag: isoTag, dataSlot: dataSlot)
             } else {
@@ -725,7 +922,7 @@ public class SentrySDK: NSObject {
         } catch (let error) {
             errorDuringSession = true
             if let session = session {
-                connected(session, false)
+                connectionDelegate?.connected(session: session, isConnected: false)
             }
             throw error
         }
@@ -746,23 +943,19 @@ public class SentrySDK: NSObject {
 
      */
     public func resetCard() async throws {
-        print("*** Reset Card")
         var errorDuringSession = false
+
         defer {
-            print("*** Reset Card - Defer")
             // closes the NFC reader session
             if errorDuringSession {
-                print("*** Reset Card - Error during session")
                 session?.invalidate(errorMessage: cardCommunicationErrorText)
             } else {
-                print("*** Reset Card - No Error During Session")
                 session?.invalidate()
             }
         }
         
         do {
             // establish a connection
-            print("*** Reset Card - Creating Connection")
             let isoTag = try await establishConnection()
             
             if let session = session {
@@ -770,7 +963,6 @@ public class SentrySDK: NSObject {
             }
 
             // reset the biometric data, setting the card into an unenrolled state
-            print("*** Reset Card - Reset data")
             try await biometricsAPI.resetBiometricData(tag: isoTag)
        } catch (let error) {
            print("*** Reset Card - Error: \(error)")

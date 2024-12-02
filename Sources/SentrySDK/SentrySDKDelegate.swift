@@ -54,3 +54,16 @@ public protocol SentrySDKEnrollmentDelegate {
      */
     func enrollmentStatus(session: NFCReaderSession, currentFingerIndex: UInt8, currentStep: UInt8, totalSteps: UInt8, isNewTouch: Bool)
 }
+
+/**
+ Implement this protocol to monitor when the system needs a finger pressed against the sensor for verification purposes.
+ */
+public protocol SentrySDKFingerprintVerificationDelegate {
+    /**
+     Indicates when the system is waiting for a finger to be pressed against the sensor.
+     
+     - Parameters:
+     - session: The `NFCReaderSession` controlling the communication with the Sentry Card.
+     */
+    func awaitingFingerprint(session: NFCReaderSession)
+}

@@ -261,7 +261,7 @@ final class BiometricsAPI {
                 throw SentrySDKError.cvmAppletBlocked
             }
             
-            if returnData.data[4] == 0x7D {
+            if returnData.data[0] == 0x7D {
                 throw SentrySDKError.cvmErrorNoMatchPerformed
             }
 
