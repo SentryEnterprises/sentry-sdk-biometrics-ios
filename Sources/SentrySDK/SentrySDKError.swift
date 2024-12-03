@@ -84,4 +84,12 @@ public enum SentrySDKError: Error {
     
     /// Indicates an error extracting the shared secrets data.
     case sharedSecretExtractionError
+    
+    case walletAppletVersionBufferTooSmall
+    
+    case cardWalletAppletVersionError
+    
+    case walletCapabilityBufferTooSmall
+    
+    case walletCapabilityError
 }

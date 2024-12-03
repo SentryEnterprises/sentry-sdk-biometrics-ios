@@ -45,6 +45,13 @@ enum APDUCommand {
     
     /// Retrieves the data stored in the small data slot of the Verify applet (requires biometric verification).
     static let getVerifyAppletStoredDataSmallSecured: [UInt8] = [0x80, 0xCB, 0x01, 0xD0, 0xFF]                  // up to 255 bytes
+    
+    static let selectWalletApplet: [UInt8] = [0x00, 0xA4, 0x04, 0x00, 0x0A, 0x4A, 0x4E, 0x45, 0x54, 0x5F, 0x4C, 0x5F, 0x01, 0x01, 0x57, 0x00]
+    
+    static let getWalletVersion: [UInt8] = [0x80, 0xCA, 0x5F, 0xC1, 0x00]
+    
+    static let getWalletCapability: [UInt8] = [0x80, 0xB8, 0x00, 0x00, 0x00]
+    
 
     /// Resets biometric data. DEVELOPMENT USE ONLY! This command works only on development cards.
     static let resetBiometricData: [UInt8] = [0xED, 0x57, 0xC1, 0x00, 0x01, 0x00]

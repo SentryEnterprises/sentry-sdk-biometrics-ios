@@ -2,7 +2,7 @@
 #include "string.h"
 #include "uECC.h"
 //#include "sha.h"
-//#include "sha3.h"
+#include "sha3.h"
 #include "aes.h"
 #include "wrapper.h"
 #include "constants.h"
@@ -275,12 +275,12 @@ int lib_auth_unwrap(uint8_t* wrapped_apdu_in, uint32_t in_len, uint8_t* unwrappe
 //    SHA256(temp32, 32, _SHA256);
 //    return 0;
 //}
-////----------------------------------------------------------------------------------------------------------------------
-//int lib_sha3_256(uint8_t* Data, int DataLen, uint8_t* _SHA256)
-//{
-//    BRKeccak256(_SHA256, Data, DataLen);
-//    return 0;
-//}
+//----------------------------------------------------------------------------------------------------------------------
+int lib_sha3_256(uint8_t* Data, int DataLen, uint8_t* _SHA256)
+{
+    BRKeccak256(_SHA256, Data, DataLen);
+    return 0;
+}
 ////----------------------------------------------------------------------------------------------------------------------
 //int lib_wallet_public_verify_sign_hash(uint8_t* Compress, uint8_t* Hash, uint8_t* Sign)
 //{
