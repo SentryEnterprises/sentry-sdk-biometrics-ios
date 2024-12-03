@@ -49,7 +49,7 @@ public class SentrySDK: NSObject {
     
     /// Returns the SDK version (read-only)
     public static var version: VersionInfo {
-        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 18, hotfixVersion: 0, text: nil) }
+        get { return VersionInfo(isInstalled: true, majorVersion: 0, minorVersion: 19, hotfixVersion: 0, text: nil) }
     }
         
     
@@ -480,7 +480,8 @@ public class SentrySDK: NSObject {
     }
     
     /**
-     Performs the enrollment process if the card is not currently enrolled, and stores data securely  in the appropriate data slot for the size of data passed (if any).
+     Performs the enrollment process if the card is not currently enrolled, and stores data securely in the indicated data slot. If the card is already enrolled, this method retrieves the data from the indicated data slot.
+     
      The user must scan their finger a number of times as dictated by the current enrollment status, typically six (6) times total. If enrollment was
      interrupted, the process starts where it left off (i.e. if six (6) scans are required and three (3) scans were previously completed, only three (3) more will be performed). This method
      updates the user via the NFC scanning UI, but includes callbacks allowing the caller to update additional UI indicating the enrollment progress.
@@ -507,6 +508,10 @@ public class SentrySDK: NSObject {
      
      - Parameters:
         - withReset: `True` to erase all existing biometric data and start the entire enrollment process over, `false` to perform enrollment without resetting biometric data (defaults to `false`).
+        - andStoreData: If the scanned card is in enrollment mode and this parameter contains a value, the indicated value is written to the card in the indicated`dataSlot`.
+        - dataSlot: The data slot to/from which the data is written/read.
+     
+     - Returns: If the scanned card is in enrollment mode, this method returns nil. If the scanned card is in verification mode, this method returns a `FingerprintValidationAndData` object that contains the fingerprint validation result and any data stored in the indicated `dataSlot`.
      
      This method can throw the following exceptions:
      * `SentrySDKError.enrollCodeLengthOutOfbounds` if `enrollCode` is less than four (4) characters or more than six (6) characters in length.
@@ -518,16 +523,29 @@ public class SentrySDK: NSObject {
      * `NFCReaderError` if an error occurred during the NFC session (includes user cancellation of the NFC session).
     
      */
-    public func enrollFingerprintIfNotEnrolled(withReset: Bool = false, andStoreData: [UInt8]?) async throws {
+    public func enrollFingerprintWithDataOrRetrieveData(withReset: Bool = false, andStoreData: [UInt8]?, dataSlot: DataSlot) async throws -> FingerprintValidationAndData? {
         var errorDuringSession = false
         var resetOnFirstCall = withReset
         var isFinished = false
         var isReconnect = false
         var currentFinger: UInt8 = 1           // this counts from 1 in the IDEX Enroll applet
+        var result: FingerprintValidationAndData?
                 
         // throw an error if the caller is passing more than the allowed maximum size of stored data
         if let dataToStore = andStoreData, dataToStore.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
             throw SentrySDKError.dataSizeNotSupported
+        }
+        
+        // throw an error if the caller is passing more than the allowed maximum size of stored data
+        switch dataSlot {
+        case .small:
+            if let dataToStore = andStoreData, dataToStore.count > SentrySDKConstants.SMALL_MAX_DATA_SIZE {
+                throw SentrySDKError.dataSizeNotSupported
+            }
+        case .huge:
+            if let dataToStore = andStoreData, dataToStore.count > SentrySDKConstants.HUGE_MAX_DATA_SIZE {
+                throw SentrySDKError.dataSizeNotSupported
+            }
         }
 
         defer {
@@ -605,25 +623,35 @@ public class SentrySDK: NSObject {
                         
                         currentFinger += 1
                     }
-                }
-                
-                // if we're also storing data, store the data securely
-                if let dataToStore = andStoreData {
-                    let slot: DataSlot = dataToStore.count > 255 ? .huge : .small
                     
-                    // initialize the BioVerify applet
+                    // if we're also storing data, store the data securely
+                    if let dataToStore = andStoreData {
+                        let slot: DataSlot = dataToStore.count > 255 ? .huge : .small
+                        
+                        // initialize the BioVerify applet
+                        try await biometricsAPI.initializeVerify(tag: isoTag)
+                        
+                        if let session = session {
+                            verificationDelegate?.awaitingFingerprint(session: session)
+                        }
+                        
+                        // store the data
+                        let result = try await biometricsAPI.setVerifyStoredDataSecure(tag: isoTag, data: dataToStore, dataSlot: slot)
+                        
+                        if !result {
+                            throw SentrySDKError.apduCommandError(APDUResponseCode.noMatchFound.rawValue)
+                        }
+                    }
+                } else {
+                    // the card is in verification mode, so retrieve the data in the indicated slot
                     try await biometricsAPI.initializeVerify(tag: isoTag)
                     
                     if let session = session {
                         verificationDelegate?.awaitingFingerprint(session: session)
                     }
-
-                    // store the data
-                    let result = try await biometricsAPI.setVerifyStoredDataSecure(tag: isoTag, data: dataToStore, dataSlot: slot)
                     
-                    if !result {
-                        throw SentrySDKError.apduCommandError(APDUResponseCode.noMatchFound.rawValue)
-                    }
+                    // retrieve the data
+                    result = try await biometricsAPI.getVerifyStoredDataSecure(tag: isoTag, dataSlot: dataSlot)
                 }
                 
                 // enrollment is fully completed
@@ -682,6 +710,8 @@ public class SentrySDK: NSObject {
                 }
             }
         }
+        
+        return result
     }
     
     /**
@@ -913,7 +943,7 @@ public class SentrySDK: NSObject {
                     verificationDelegate?.awaitingFingerprint(session: session)
                 }
 
-                // store the data
+                // retrieve the data
                 return try await biometricsAPI.getVerifyStoredDataSecure(tag: isoTag, dataSlot: dataSlot)
             } else {
                 // otherwise, this card isn't enrolled and a validation cannot be performed
